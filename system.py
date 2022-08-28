@@ -1,13 +1,7 @@
 import numpy as np
 import torch
 import gym
-import argparse
-import os
 
-import utils
-import TD3
-import OurDDPG
-import DDPG
 import time
 import math
 
@@ -45,10 +39,20 @@ class System:
 		np.random.seed(seed)
 
 	def reset(self):
+
 		return self.env.reset()
 
 	def close(self):
+		
 		return self.env.close()
+
+	def state_dim(self):
+
+		return self.s_dim
+
+	def action_dim(self):
+
+		return self.a_dim
 
 	def gen_action(self):
 		

@@ -1,0 +1,52 @@
+<! this is the same size with former one , 
+just use tendon instead of rope and increase the size of fingertip>
+ <mujoco model="reacher">
+    <compiler angle="radian" inertiafromgeom="true"/>
+	<default>
+		<joint armature="10" damping="1" limited="true"/>
+		<geom contype="0" friction="1 0.1 0.1" rgba="0.7 0.7 0 1"/>
+	</default>
+	<option gravity="0 0 -9.81" integrator="RK4" timestep="0.01" jacobian="dense"/>
+    <worldbody>
+
+        <!-- Arm -->
+		<geom conaffinity="0" contype="0" fromto="0 0 0 0.03 0 0" name="root" rgba="0.9 0.4 0.6 1" size=".011" type="cylinder"/>
+        <body name="body0" pos="0.0 0 -0.00">
+            <geom fromto="0.0 0 0 0.0 0 -0.1" name="link0" rgba="0.0 0.4 0.6 1" size=".01" 
+                    type="capsule"/>
+			<joint axis="1 0 0" limited="true" name="joint0" pos="0 0 0" range="-3.14 3.14" 
+                    type="hinge"/>
+            <body name="body1" pos="0.0 0 -0.1">
+				<geom fromto="0 0 0 0 0 -0.1" name="link1" rgba="0.0 0.4 0.6 1" size=".01" 
+                    type="capsule"/>
+				<joint axis="1 0 0" limited="true" name="joint1" pos="0 0 0" range="-3.14 3.14" 
+                    type="hinge"/>
+                <site name="end1" pos="0 0 -0.1" type="sphere" size="0.01"/>
+            </body>
+        </body>
+        <body name="fingertip" pos="0 0 -1.002" >
+            <freejoint/>
+            <site name="end2" pos="0 0 0.01" type="sphere" size="0.01"/>
+            <geom type="box" size="0.01 0.01 0.01" rgba="0 0.9 0 1"/>
+        </body>
+
+        <body name="target" pos="0 0.75 0" euler="0 0 0">
+            <joint armature="0" axis="1 0 0" damping="0" limited="true" name="target_x" pos="0 0 0" range="-1 1" ref="0.5" stiffness="0"/>
+            <joint armature="0" axis="0 1 0" damping="0" limited="true" name="target_y" pos="0 0 0"  range="-1 1" ref="0" stiffness="0"/>
+            <joint armature="0" axis="0 0 1" damping="0" limited="true" name="target_z" pos="0 0 0"  range="-1 1" ref="0" stiffness="0" />
+            <geom conaffinity="0" contype="0" name="target" pos="0 0 0" rgba="0.9 0.4 0.6 1" size=".01" type="sphere"/>
+        </body>
+
+    </worldbody>
+    <tendon>
+        <spatial limited="true" range="0.59 0.6" rgba=".8 .2 .1 1" width="0.007">
+            <site site="end1"/>
+            <site site="end2"/>
+        </spatial>
+    </tendon>
+    
+    <actuator>
+		<motor ctrllimited="true" ctrlrange="-250.0 250.0" gear="1.0" name="torque_0" joint="joint0"/>
+		<motor ctrllimited="true" ctrlrange="-250.0 250.0" gear="1.0" name="torque_1" joint="joint1"/>
+	</actuator>
+</mujoco>
