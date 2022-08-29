@@ -1,9 +1,103 @@
 import numpy as np
 import torch
 import gym
-
+from SAC import Memory, v_valueNet, q_valueNet, policyNet
 import time
 import math
+
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda:0" if use_cuda else "cpu")
+
+def updateNet(target, source, tau):
+    for target_param, source_param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(
+            target_param.data * (1.0 - tau) + source_param.data * tau
+        )
+
+class SAC_Agent:
+
+	def __init__(self, s_dim, a_dim, memory_capacity=50000, batch_size=64, 
+                    discount_factor=0.99, temperature=1.0,
+                    soft_lr=5e-3, reward_scale=1.0):
+		'''
+		Initializes the agent.
+		Arguments:
+		Returns:
+		none
+		'''
+		self.s_dim = s_dim
+		self.a_dim = a_dim
+		self.sa_dim = self.s_dim + self.a_dim
+		self.batch_size = batch_size
+		self.gamma = discount_factor
+		self.soft_lr = soft_lr
+		self.alpha = temperature
+		self.reward_scale = reward_scale
+
+		self.memory = Memory(memory_capacity)
+		self.actor = policyNet(s_dim, a_dim).to(device)
+		self.critic1 = q_valueNet(self.s_dim, self.a_dim).to(device)
+		self.critic2 = q_valueNet(self.s_dim, self.a_dim).to(device)
+		self.baseline = v_valueNet(s_dim).to(device)
+		self.baseline_target = v_valueNet(s_dim).to(device)
+
+		updateNet(self.baseline_target, self.baseline, 1.0)
+		
+	def act(self, state, explore=True):
+		with torch.no_grad():
+			action = self.actor.sample_action(state)
+			return action
+
+	def memorize(self, event):
+		self.memory.store(event[np.newaxis, :])
+
+	def learn(self):
+		batch = self.memory.sample(self.batch_size)
+		batch = np.concatenate(batch, axis=0)
+
+		s_batch = torch.FloatTensor(batch[:, :self.s_dim]).to(device)
+		a_batch = torch.FloatTensor(batch[:, self.s_dim:self.sa_dim]).to(device)
+		r_batch = torch.FloatTensor(batch[:, self.sa_dim]).unsqueeze(1).to(device)
+		ns_batch = torch.FloatTensor(batch[:, self.sa_dim + 1:self.sa_dim + 1 + self.s_dim]).to(device)
+
+		# Optimize q networks
+		q1 = self.critic1(s_batch, a_batch)
+		q2 = self.critic2(s_batch, a_batch)
+		next_v = self.baseline_target(ns_batch)
+		q_approx = self.reward_scale * r_batch + self.gamma * next_v
+
+		q1_loss = self.critic1.loss_func(q1, q_approx.detach())
+		self.critic1.optimizer.zero_grad()
+		q1_loss.backward()
+		self.critic1.optimizer.step()
+
+		q2_loss = self.critic2.loss_func(q2, q_approx.detach())
+		self.critic2.optimizer.zero_grad()
+		q2_loss.backward()
+		self.critic2.optimizer.step()
+
+		# Optimize v network
+		v = self.baseline(s_batch)
+		a_batch_off, llhood = self.actor.sample_action_and_llhood(s_batch)
+		q1_off = self.critic1(s_batch, a_batch_off)
+		q2_off = self.critic2(s_batch, a_batch_off)
+		q_off = torch.min(q1_off, q2_off)
+		v_approx = q_off - self.alpha * llhood
+
+		v_loss = self.baseline.loss_func(v, v_approx.detach())
+		self.baseline.optimizer.zero_grad()
+		v_loss.backward()
+		self.baseline.optimizer.step()
+
+		# Optimize policy network
+		pi_loss = (llhood - q_off).mean()
+		self.actor.optimizer.zero_grad()
+		pi_loss.backward()
+		self.actor.optimizer.step()
+
+		# Update v target network
+		updateNet(self.baseline_target, self.baseline, self.soft_lr)
+
 
 class System:
 	def __init__(self,system='Reacher-v5'):
