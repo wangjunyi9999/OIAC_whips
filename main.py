@@ -1,5 +1,4 @@
-from audioop import avg
-from cmath import exp
+import pickle
 import sys
 import numpy as np
 import torch
@@ -19,15 +18,18 @@ def eval_policy(policy, eval_episodes):
 
     avg_reward = 0
     for step in range(eval_episodes):
-        state, done = model.reset(), False
+        state = model.step_reset()
         state=model.scale_observation(state)
         action = policy.select_action(np.array(state))
         action=model.recover_action(action)
         state, reward, done = model.step_action(action)
         avg_reward += reward[0]
-        model.reset()
+        
         step+=1
         if done:
+            save_action.append(action)
+            np.savetxt(f"./save_action/{file_name}+{t}", save_action)
+            model.reset()
             print("Hit it! :)")
             print("avg_reward",avg_reward, "action", action)
             break
@@ -44,10 +46,10 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--policy", default="SAC")                  # Policy name (TD3, DDPG or OurDDPG)
+    parser.add_argument("--policy", default="TD3")                  # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--env", default="Reacher-v5")          # OpenAI gym environment name
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--start_timesteps", default=1, type=int)# Time steps initial random policy is used  25e3
+    parser.add_argument("--start_timesteps", default=256, type=int)# Time steps initial random policy is used  25e3
     parser.add_argument("--eval_steps", default=20, type=int)       # How many (time steps) we evaluate  10
     parser.add_argument("--eval_freq", default=100, type=int)       # How often (time steps) we evaluate  5e3
     parser.add_argument("--max_timesteps", default=1e4, type=int)   # Max time steps to run environment  1e6
@@ -77,16 +79,17 @@ if __name__=="__main__":
 
     state_dim = model.state_dim()
     action_dim = model.action_dim()
+    # TODO: TD3 
     max_action = np.pi*0.75
-
+    save_action=[]
     kwargs = {
         "state_dim": state_dim,
         "action_dim": action_dim,
         "max_action": max_action,
         "discount": args.discount,
         "tau": args.tau}
-
-    #TODO
+    
+    #TODO: SAC more implementation
     if args.policy ==  "SAC":
 
         agent=SAC_Agent(s_dim=state_dim, a_dim=action_dim, reward_scale=args.reward_scale)
@@ -98,6 +101,8 @@ if __name__=="__main__":
         episode_reward = 0
         episode_timesteps = 0
         episode_num = 0
+        evaluation_SAC=[]
+
         for t in range(int(args.max_timesteps)):
 
             if t< args.start_timesteps:
@@ -107,24 +112,27 @@ if __name__=="__main__":
                 state,reward, done = model.step_action(action)
                 next_state=state
                 next_state=model.scale_observation(next_state)
-                action= model.scale_action(action)
-
+                print("initial action:", t, action)
+                action= model.scale_action(action)                
                 event[:state_dim] = state
                 event[state_dim:state_dim+action_dim] = action
                 event[state_dim + action_dim] = reward[0]
                 event[state_dim + action_dim + 1: e_dim] = next_state
 
+                episode_reward+=reward[0]
                 agent.memorize(event)
                 state=np.copy(next_state)
 
+
             else:
                 event = np.empty(e_dim)
-                state= model.reset()
+                state= model.step_reset()
                 state= model.scale_observation(state)
                 cuda_state=torch.FloatTensor(state).to(device)
                 action= agent.act(cuda_state, explore=learn)
                 action=model.recover_action(action.numpy())
                 s, reward, done= model.step_action(action)
+                print("SAC_training:", t, "reward:" , reward)
                 s= model.scale_observation(s)
                 next_state=s
                 action=model.scale_action(action)
@@ -137,9 +145,9 @@ if __name__=="__main__":
                 agent.memorize(event)
                 state= np.copy(next_state)
                 episode_reward+=reward[0]
-                
+                episode_timesteps+=1
                 if len(agent.memory.data) < args.batch_size:
-                    model.reset()
+                    model.step_reset()
                 else:
                     agent.learn()
 
@@ -151,33 +159,44 @@ if __name__=="__main__":
                 episode_reward = 0
                 episode_timesteps = 0
                 episode_num += 1 
-
-            if t>= args.start_timesteps and (t + 1) % args.eval_freq == 0:
+            #Evaluation SAC:
+            #if t>= args.start_timesteps and (t + 1) % args.eval_freq == 0:
+            if (t + 1) % args.eval_freq == 0:
                 avg_reward=0
-                for epsd_step in range(0, args.eval_episodes):
+                print("---------------------------------------")
+                print("Do SAC Evaluation")
+                print("---------------------------------------")
+                for epsd_step in range(0, args.eval_steps):
 
-                    state= model.reset()
+                    state= model.step_reset()
                     state= model.scale_observation(state)
                     cuda_state=torch.FloatTensor(state).to(device)
                     action= agent.act(cuda_state, explore=learn)
                     action=model.recover_action(action.numpy())
                     s, reward, done= model.step_action(action)
                     epsd_step+=1
+                    avg_reward+=reward[0]
                     if done:
+                        model.step_reset()
+                        save_action.append(action)
+                        np.savetxt(f"./save_action/{file_name}+{t}", save_action)
                         print("Hit it! :)")
                         print("avg_reward",avg_reward, "action", action)
                         break
+
                 avg_reward /= epsd_step
     
 	
                 print("---------------------------------------")
-                print(f"Evaluation over {args.eval_episodes} episodes: {avg_reward:.3f}")
+                print(f"Evaluation over {args.eval_steps} episodes: {avg_reward:.3f}")
                 print("---------------------------------------")
+                evaluation_SAC.append(avg_reward)
+                np.save(f"./results/{file_name}", evaluation_SAC)
 
+    # if args.save_model: 
+    #     pickle.dump(model,open(file_name+'_'+str((t+1)//args.eval_freq)+'.p','wb'))
 
-                # evaluations.append(eval_policy(policy, args.eval_steps))
-                # np.save(f"./results/{file_name}", evaluations)
-                # if args.save_model: policy.save(f"./models/{file_name}")
+                
     else:
     # Initialize policy
         if args.policy == "TD3":
@@ -191,11 +210,12 @@ if __name__=="__main__":
         elif args.policy == "DDPG":
             policy = DDPG.DDPG(**kwargs)
 
+        state, done = model.reset(), False
+        state = model.scale_observation(state)
         replay_buffer = ReplayBuffer(state_dim, action_dim)
         evaluations=[eval_policy(policy,args.eval_steps)]
 
-        state, done = model.reset(), False
-        state = model.scale_observation(state)
+        
         episode_reward = 0
         episode_timesteps = 0
         episode_num = 0
@@ -206,6 +226,14 @@ if __name__=="__main__":
 
             if t < args.start_timesteps:
                 action = model.gen_action()
+                next_state, reward, done = model.step_action(action)
+                model.reset()
+                next_state= model.scale_observation(next_state)
+                action= model.scale_action(action)
+                done_bool = float(done) if next_state < 0.02 else 0
+                replay_buffer.add(state, action, next_state, reward, done_bool)
+                state = next_state
+                episode_reward+=reward[0]
             else:
                 """
                 # max_action is the real value;
@@ -217,28 +245,29 @@ if __name__=="__main__":
                 ).clip(-1,1)
                 action= model.recover_action(action)
             
-            next_state, reward, done = model.step_action(action)
-            model.reset()
-            next_state= model.scale_observation(next_state)
-            action= model.scale_action(action)
+                next_state, reward, done = model.step_action(action)
+                model.step_reset()
+                next_state= model.scale_observation(next_state)
+                action= model.scale_action(action)
 
-            done_bool = float(done) if next_state < 0.02 else 0
-            replay_buffer.add(state, action, next_state, reward, done_bool)
-            state = next_state
-            episode_reward+=reward[0]
+                done_bool = float(done) if next_state < 0.02 else 0
+                replay_buffer.add(state, action, next_state, reward, done_bool)
+                state = next_state
+                episode_reward+=reward[0]
 
-            if t>= args.start_timesteps:
-                #print("Finish initialization")
-                policy.train(replay_buffer, args.batch_size)
-            
-            if done:
-                print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
-                print("action:",model.recover_action(action))
-                # Reset environment
-                state, done = model.reset(), False
-                episode_reward = 0
-                episode_timesteps = 0
-                episode_num += 1 
+                if t>= args.start_timesteps:
+                    #print("Finish initialization")
+                    policy.train(replay_buffer, args.batch_size)
+                
+                if done:
+                    
+                    print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
+                    print("action:",model.recover_action(action))                
+                    # Reset environment
+                    state, done = model.step_reset(), False
+                    episode_reward = 0
+                    episode_timesteps = 0
+                    episode_num += 1 
 
             # Evaluate episode
             # evaluate after the start time or not? t>= args.start_timesteps and

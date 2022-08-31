@@ -185,6 +185,29 @@ class BaseMujocoEnv(gym.Env):
             return ob
         else:
             return ob, {}
+    """
+    add new def to reset single step
+    """       
+    def step_reset(
+        self,
+        *,
+        seed: Optional[int] = None,
+        return_info: bool = False,
+        options: Optional[dict] = None,
+    ):
+        super().reset(seed=seed)
+
+        self._reset_simulation()
+        self.data.qvel[0]=0
+        self.data.qvel[1]=0
+        ob = self.step_reset_model()
+
+        self.renderer.reset()
+        self.renderer.render_step()
+        if not return_info:
+            return ob
+        else:
+            return ob, {}
 
     def set_state(self, qpos, qvel):
         """
@@ -411,7 +434,10 @@ class MujocoEnv(BaseMujocoEnv):
         self.data.qvel[:] = np.copy(qvel)
         if self.model.na == 0:
             self.data.act[:] = None
+        #mujoco.mj_step(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)
+        #print(self.data.qpos[:])
+        
 
     # def _step_mujoco_simulation(self, ctrl, n_frames):
     #     """
@@ -432,14 +458,19 @@ class MujocoEnv(BaseMujocoEnv):
     #     # See https://github.com/openai/gym/issues/1541
     #     mujoco.mj_rnePostConstraint(self.model, self.data)
     def _step_mujoco_simulation(self, ctrl, n_frames):
+
+        #if len(ctrl)==6:
         self.data.qpos[0]= ctrl[0]
         self.data.qpos[1]= ctrl[1]
         self.data.qvel[0]= ctrl[2]
         self.data.qvel[1]= ctrl[3]
         self.data.ctrl[0]= ctrl[4]
         self.data.ctrl[1]= ctrl[5]
+        # elif len(ctrl)==2:
+        #     self.data.qpos[-3:-1]=ctrl
         mujoco.mj_step(self.model, self.data, nstep=self.frame_skip)
         mujoco.mj_rnePostConstraint(self.model, self.data)
+
     def _render(
         self,
         mode: str = "human",
@@ -518,3 +549,6 @@ class MujocoEnv(BaseMujocoEnv):
 
     def get_body_com(self, body_name):
         return self.data.body(body_name).xpos
+
+    def get_site_com(self, site_name):
+        return self.data.site(site_name).xpos

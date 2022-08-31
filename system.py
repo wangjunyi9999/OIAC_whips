@@ -42,7 +42,7 @@ class SAC_Agent:
 		self.baseline_target = v_valueNet(s_dim).to(device)
 
 		updateNet(self.baseline_target, self.baseline, 1.0)
-		
+
 	def act(self, state, explore=True):
 		with torch.no_grad():
 			action = self.actor.sample_action(state)
@@ -135,6 +135,10 @@ class System:
 	def reset(self):
 
 		return self.env.reset()
+
+	def step_reset(self):
+		
+		return self.env.step_reset()
 
 	def close(self):
 		

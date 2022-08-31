@@ -154,16 +154,39 @@ class ReacherEnv_jy(MujocoEnv, utils.EzPickle):
         assert self.viewer is not None
         self.viewer.cam.trackbodyid = 0
 
+    def step_reset_model(self):
+
+        qpos=self.step_qpos
+        qvel = self.step_qvel
+        self.set_state(qpos, qvel)
+        print("target:",self.get_body_com("target"))
+
+        return self._get_obs()
+
     def reset_model(self):
 
         qpos=self.init_qpos
-
-        qvel = self.init_qvel + self.np_random.uniform(
-            low=-0.005, high=0.005, size=self.model.nv
-        )
-        qvel[-3:] = 0
+        #while True:
+        self.goal = self.np_random.uniform(low=-0.1, high=0.1, size=3)
+            # if np.linalg.norm(self.goal) < 0.2:
+            #     break
+        qpos[-3:] = self.goal
+        qvel = self.init_qvel 
+        self.step_qpos=qpos
+        self.step_qvel=qvel
         self.set_state(qpos, qvel)
+        print("CHANGE TARGET NOW!!!!!!!!")
+        print("target:",self.get_body_com("target"))
         return self._get_obs()
+
+        # qpos=self.init_qpos
+
+        # qvel = self.init_qvel + self.np_random.uniform(
+        #     low=-0.005, high=0.005, size=self.model.nv
+        # )
+        # qvel[-3:] = 0
+        # self.set_state(qpos, qvel)
+        # return self._get_obs()
 
     def _get_obs(self):
         
@@ -174,20 +197,9 @@ class ReacherEnv_jy(MujocoEnv, utils.EzPickle):
         
         """
         # print("fingertip:",self.get_body_com("fingertip"))
-        # print("target:",self.get_body_com("target"))
+        #print("target:",self.get_body_com("target"))
         #            np.array([self.data.ctrl[0]]), np.array([self.data.ctrl[1]]),
         return np.concatenate([
             np.array([np.linalg.norm(self.get_body_com("fingertip") - self.get_body_com("target"))])
         ]
-
         )
-        # theta = self.data.qpos.flat[:2]
-        # return np.concatenate(
-        #     [
-        #         np.cos(theta),
-        #         np.sin(theta),
-        #         self.data.qpos.flat[2:],
-        #         self.data.qvel.flat[:2],
-        #         self.get_body_com("fingertip") - self.get_body_com("target"),
-        #     ]
-        # )
