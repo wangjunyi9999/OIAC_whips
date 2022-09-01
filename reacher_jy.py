@@ -166,11 +166,11 @@ class ReacherEnv_jy(MujocoEnv, utils.EzPickle):
     def reset_model(self):
 
         qpos=self.init_qpos
-        #while True:
-        self.goal = self.np_random.uniform(low=-0.1, high=0.1, size=3)
-            # if np.linalg.norm(self.goal) < 0.2:
-            #     break
-        qpos[-3:] = self.goal
+        while True:
+            self.goal = self.np_random.uniform(low=-0.1, high=0.1, size=2)
+            if np.linalg.norm(self.goal) < 0.1:
+                break
+        qpos[-2:] = self.goal
         qvel = self.init_qvel 
         self.step_qpos=qpos
         self.step_qvel=qvel

@@ -46,7 +46,7 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--policy", default="TD3")                  # Policy name (TD3, DDPG or OurDDPG)
+    parser.add_argument("--policy", default="SAC")                  # Policy name (TD3, DDPG or OurDDPG)
     parser.add_argument("--env", default="Reacher-v5")          # OpenAI gym environment name
     parser.add_argument("--seed", default=0, type=int)              # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--start_timesteps", default=256, type=int)# Time steps initial random policy is used  25e3
@@ -155,13 +155,13 @@ if __name__=="__main__":
                 print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
                 print("action:",model.recover_action(action))
                 # Reset environment
-                state, done = model.reset(), False
+                state, done = model.step_reset(), False
                 episode_reward = 0
                 episode_timesteps = 0
                 episode_num += 1 
-            #Evaluation SAC:
-            #if t>= args.start_timesteps and (t + 1) % args.eval_freq == 0:
-            if (t + 1) % args.eval_freq == 0:
+            #Evaluation SAC
+
+            if t>= args.start_timesteps and (t + 1) % args.eval_freq == 0:
                 avg_reward=0
                 print("---------------------------------------")
                 print("Do SAC Evaluation")
@@ -177,7 +177,7 @@ if __name__=="__main__":
                     epsd_step+=1
                     avg_reward+=reward[0]
                     if done:
-                        model.step_reset()
+                        model.reset()
                         save_action.append(action)
                         np.savetxt(f"./save_action/{file_name}+{t}", save_action)
                         print("Hit it! :)")

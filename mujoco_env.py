@@ -424,7 +424,8 @@ class MujocoEnv(BaseMujocoEnv):
     def _initialize_simulation(self):
         self.model = mujoco.MjModel.from_xml_path(self.fullpath)
         self.data = mujoco.MjData(self.model)
-
+        #self.data.xfrc_applied[4,2]= 0.0042*9.81
+        
     def _reset_simulation(self):
         mujoco.mj_resetData(self.model, self.data)
 
@@ -432,6 +433,8 @@ class MujocoEnv(BaseMujocoEnv):
         super().set_state(qpos, qvel)
         self.data.qpos[:] = np.copy(qpos)
         self.data.qvel[:] = np.copy(qvel)
+        #compensate the gravity
+        self.data.xfrc_applied[4,2]= 0.004189*9.81
         if self.model.na == 0:
             self.data.act[:] = None
         #mujoco.mj_step(self.model, self.data)
