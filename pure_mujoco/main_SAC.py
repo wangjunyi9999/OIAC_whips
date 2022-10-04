@@ -18,7 +18,7 @@ def do_evaluation():
     avg_reward=0
     learn=False
     s=ini_state
-    #my_sim.reset_model()
+
     print("---------------------------------------")
     print("Do SAC Evaluation")
     print("---------------------------------------")
@@ -37,7 +37,7 @@ def do_evaluation():
 
 
         if done:
-           
+
             save_action.append(action)
             np.savetxt(f"./save_action/{file_name}+{t}+{target_pos}", save_action)
             print("Hit it! :), target_pos:", target_pos)

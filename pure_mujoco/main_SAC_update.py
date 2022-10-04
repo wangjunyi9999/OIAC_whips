@@ -1,4 +1,5 @@
-
+# this update file is similar with the normal SAC, but cancelling the evaluation,
+# and adding the training process result 
 import numpy as np
 import argparse
 import torch
@@ -18,7 +19,7 @@ def do_evaluation():
     avg_reward=0
     learn=False
     s=ini_state
-    #my_sim.reset_model()
+
     print("---------------------------------------")
     print("Do SAC Evaluation")
     print("---------------------------------------")
@@ -36,8 +37,8 @@ def do_evaluation():
         print("eval", epsd_step, reward, target_pos)
 
 
-        if reward>-5:
-            done=True
+        if done:
+
             save_action.append(action)
             np.savetxt(f"./save_action/{file_name}+{t}+{target_pos}", save_action)
             print("Hit it! :), target_pos:", target_pos)
@@ -172,11 +173,11 @@ if __name__=="__main__":
                 event[state_dim + action_dim] = reward
 
                 # print frequency each 10 episode
-                # if t% args.print_freq==0:
-                print("---------------------------------------")
-                print("sac t:\n",t,"sac act:",action,"\n", "sac s:",state,"sac reward", reward)
-                print("training_target_pos:", target_pos)
-                print("---------------------------------------")
+                if t% args.print_freq==0:
+                    print("---------------------------------------")
+                    print("sac t:\n",t,"sac act:",action,"\n", "sac s:",state,"sac reward", reward)
+                    print("training_target_pos:", target_pos)
+                    print("---------------------------------------")
 
                 next_state=my_sim.scale_observation(state)
                 event[state_dim + action_dim + 1: e_dim] = next_state
@@ -185,7 +186,7 @@ if __name__=="__main__":
                 ini_state=np.copy(next_state)
                 episode_reward+=reward
                 episode_timesteps+=1
-                #agent.learn()
+                agent.learn()
 
                 if done:
                     
