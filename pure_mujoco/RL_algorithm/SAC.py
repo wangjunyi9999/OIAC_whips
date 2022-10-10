@@ -317,7 +317,9 @@ class policyNet(nn.Module):
         x = F.relu(self.l2(x))
         m = self.l31(x)
         log_stdev = self.l32(x)
+        # print("log_std 1: ",log_stdev)
         log_stdev = torch.clamp(log_stdev, self.min_log_stdev, self.max_log_stdev)
+        # print("log_std 2:",log_stdev, "m",m)
         return m, log_stdev
 
     def sample_action(self, s):
@@ -327,11 +329,14 @@ class policyNet(nn.Module):
         Arguments:
         x -- input to be propagated through the net
         Outputs:
+        through tanh(x), the output would be (-1,1), fixing the vanishing gradient problems 
         a --
         '''
         m, log_stdev = self(s)
         u = m + log_stdev.exp() * torch.randn_like(m)
+        # print("u",u)
         a = torch.tanh(u).cpu()
+        # print("a",a)
         return a
 
     def sample_action_and_llhood(self, s):

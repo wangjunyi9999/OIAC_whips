@@ -2,6 +2,8 @@ import numpy           as np
 import mujoco_py       as mjPy
 import numpy.linalg as la
 from modules.utils     import *
+import math
+import random
 
 
 class Simulation:
@@ -44,7 +46,7 @@ class Simulation:
         # The current time, time-step (step_t), start time of the controller (ts) and total runtime (T) of the simulation
         self.t   = 0
         self.step_t  = self.mj_model.opt.timestep                                                  
-        self.stop_t= 0.5
+        self.stop_t= 0.6
 
         limb_names = [ "_".join( name.split( "_" )[ 1 : ] ) for name in self.mj_model.body_names if "body" and "arm" in name ]
         self.M  = { name: get_model_prop( self.mj_model, "body", name, "mass"    ) for name in limb_names }
@@ -61,8 +63,12 @@ class Simulation:
         self.save_step  = round( ( 1. / self.step_t ) / self.args.save_freq  )   
 
         # action low and high boundary
-        self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, 0.25*np.pi, 0.3])
-        self.action_space_high=np.array([-0.25*np.pi, -0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
+        # self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, 0.25*np.pi, 0.3])
+        # self.action_space_high=np.array([-0.25*np.pi, -0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
+
+        # change boundary
+        self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, -0.25*np.pi, 0.3])
+        self.action_space_high=np.array([-0.25*np.pi, 0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
 
         # obs_high 2.38*2
         self.obs_low=np.array([1e-2])
@@ -78,29 +84,34 @@ class Simulation:
         self.q1_end_min=self.action_space_low[2]
         self.q2_end_min=self.action_space_low[3]
         self.t_min= self.action_space_low[4]
+
         self.q1_ini_max=self.action_space_high[0]
         self.q2_ini_max=self.action_space_high[1]
         self.q1_end_max=self.action_space_high[2]
         self.q2_end_max=self.action_space_high[3]
         self.t_max= self.action_space_high[4]
 
-        self.start_valueset= np.linspace(self.q1_ini_min, self.q1_ini_max, 100)
-        self.end_valueset= np.linspace(self.q1_end_min, self.q1_end_max ,100)
+        self.q1_start_valueset= np.linspace(self.q1_ini_min, self.q1_ini_max, 100)
+        self.q1_end_valueset= np.linspace(self.q1_end_min, self.q1_end_max ,100)
+        self.q2_start_valueset= np.linspace(self.q2_ini_min, self.q2_ini_max, 100)
+        self.q2_end_valueset= np.linspace(self.q2_end_min, self.q2_end_max ,100)
         self.D_valueset= np.linspace(self.t_min, self.t_max, 100)
 
         # set target sets index
         self.tar_p=0
-
+        # OIAC or constant controller
+        self.is_oiac=args.is_oiac
         
 
     def gen_action(self):
         
         action= np.empty(shape=self.a_dim, dtype=float)
-
-        action[0]=np.random.choice(self.start_valueset,1, replace= True)
-        action[1]=np.random.choice(self.start_valueset,1,replace= True)
-        action[2]=np.random.choice(self.end_valueset,1, replace= True)
-        action[3]=np.random.choice(self.end_valueset,1,replace= True)
+        
+        
+        action[0]=np.random.choice(self.q1_start_valueset,1, replace= True)
+        action[1]=np.random.choice(self.q2_start_valueset,1,replace= True)
+        action[2]=np.random.choice(self.q1_end_valueset,1, replace= True)
+        action[3]=np.random.choice(self.q2_end_valueset,1,replace= True)
         action[4]=np.random.choice(self.D_valueset,1,replace= True)
 
         return action
@@ -142,7 +153,6 @@ class Simulation:
         return state
 
     def init( self, qpos: np.ndarray, qvel: np.ndarray ):
-
 
         # Current time (t) of the simulation 
         self.t  = 0
@@ -190,28 +200,6 @@ class Simulation:
 
         self.mj_sim.reset( )
     
-    def reset_model(self):
-        """
-            reset target pos in a r=0.1 circle, 
-            reset model qpos qvel
-        """
-        self.init_qpos = self.mj_data.qpos.ravel().copy()
-        self.init_qvel = self.mj_data.qvel.ravel().copy()
-        qpos=self.init_qpos
-
-
-        # random half circle target pos
-        while True:
-            self.goal = np.random.uniform(low=-0.1, high=0.1, size=2)
-            if np.linalg.norm(self.goal) < 0.1:
-                break
-
-        qpos[-2:] = self.goal
-        qvel = self.init_qvel 
-        self.step_qpos=qpos
-        self.step_qvel=qvel
-        self.set_state(qpos, qvel)
-        print("Random Target NOW!!!!!!!!")
 
     def diamond_target_move(self, done):
         """
@@ -247,23 +235,55 @@ class Simulation:
         self.step_qvel=qvel
         self.set_state(qpos, qvel)
 
-    def target_move(self,done):
+    def fixed_target(self):
+
+        qpos=self.mj_data.qpos.ravel().copy()
+        qvel = self.mj_data.qvel.ravel().copy()
+        qpos[-2:]=[0.6,0]
+        self.step_qpos=qpos
+        self.step_qvel=qvel
+        self.set_state(qpos, qvel)
+    
+    # def random_target(self,done):
+
+    #     qpos=self.mj_data.qpos.ravel().copy()
+    #     qvel = self.mj_data.qvel.ravel().copy()
+    #     goal=qpos[-2:]
+    #     if done:
+    #         while True:
+    #             goal_x = random.uniform(0, 0.6)
+    #             goal_y = random.uniform(-0.6, 0.6)
+    #             if math.sqrt(goal_x**2+goal_y**2) < 0.6:
+    #                 qpos[-2:] =[goal_x,goal_y]    
+    #                 qpos[-2:]=goal                
+    #                 break
+          
+    #     self.step_qpos=qpos
+    #     self.step_qvel=qvel
+    #     self.set_state(qpos, qvel)
+
+    #     return goal
+
+    
+
+    def target_move(self,goal):
 
         """
         define 20 points, and if it is hitted, change to another one
         """
-        target=np.array([[2.33,0],[2.28,0],[2.23,0],[2.18,0],[2.36,0.1],[2.31,0.1],[2.26,0.1],[2.2,0.1],
-                [2.34,0.2],[2.22,0.2],[2.32,0.3],[2.28,0.3],[2.24,0.3],[2.3,0.4],[2.26,0.4],[2.28,0.5],
-                [2.35,-0.1],[2.33,-0.3],[2.28,-0.5]])
-        if done:
-            self.tar_p+=1
+        # target=np.array([[2.3,0],[2.33,0],[2.28,0],[2.23,0],[2.18,0],[2.36,0.1],[2.31,0.1],[2.26,0.1],[2.2,0.1],
+        #         [2.34,0.2],[2.22,0.2],[2.32,0.3],[2.28,0.3],[2.24,0.3],[2.3,0.4],[2.26,0.4],[2.28,0.5],
+        #         [2.35,-0.1],[2.33,-0.3],[2.28,-0.5]])
+        
         qpos=self.mj_data.qpos.ravel().copy()
         qvel = self.mj_data.qvel.ravel().copy()
-        qpos[-2:] = target[self.tar_p]-np.array([2.38,0])
+        qpos[-2:] = goal
 
         self.step_qpos=qpos
         self.step_qvel=qvel
         self.set_state(qpos, qvel)
+
+        
 
 
        
@@ -331,7 +351,7 @@ class Simulation:
 
             else:     
                 """ # use oiac or constant""" 
-                tau= self.get_tau(action, self.t, is_oiac=True)
+                tau= self.get_tau(action, self.t, is_oiac=self.is_oiac)
                 self.mj_data.ctrl[ :self.n_act ] = tau
                 
                 dist_mov.append(self.dist2tip())
@@ -374,7 +394,7 @@ class Simulation:
 
         return reward, done
 
-    def get_tau(self, action, t, is_oiac=False, is_gravity_comp = True, is_noise = False):
+    def get_tau(self, action, t, is_oiac, is_gravity_comp = True, is_noise = False):
 
         # Save the current time 
         self.t = t 
@@ -399,15 +419,15 @@ class Simulation:
             self.c_const = 5.0
             self.beta = 0.05
 
-            #track_err= self.q_err+ self.beta* self.v_err
-            track_err= self.beta*self.q_err+  self.v_err
+            track_err= self.q_err+ self.beta* self.v_err
+            
             adapt_scale= self.a_const/ (1+ self.c_const* la.norm(track_err)*la.norm(track_err))
 
             # self.Kq= track_err*self.q_err.T/adapt_scale
             # self.Bq= track_err*self.v_err.T/adapt_scale
 
-            self.Kq= track_err/adapt_scale*self.q_err.T
-            self.Bq= track_err/adapt_scale*self.v_err.T
+            self.Kq= track_err*self.q_err.T/adapt_scale
+            self.Bq= track_err*self.v_err.T/adapt_scale
 
 
         else:

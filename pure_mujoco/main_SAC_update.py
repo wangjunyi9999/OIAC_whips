@@ -1,11 +1,12 @@
-# this update file is similar with the normal SAC, but cancelling the evaluation,
-# and adding the training process result 
+
 import numpy as np
 import argparse
 import torch
 from modules.simulation import Simulation
 from modules.utils import make_whip_downwards
 from RL_algorithm.SAC import SAC_Agent
+import random
+import math
 
 def init(action):
 
@@ -13,6 +14,22 @@ def init(action):
     my_sim.init( qpos = init_cond[ "qpos" ], qvel = init_cond[ "qvel" ] )
     make_whip_downwards( my_sim )
     my_sim.forward( )
+
+def random_target():
+
+        goal_x=[]
+        goal_y=[]
+        random.seed(0)
+        for _ in range(int(args.max_timesteps)):
+            while True:
+                x = random.uniform(0, 0.6)
+                y = random.uniform(-0.6, 0.6)
+                if math.sqrt(x**2+y**2) < 0.6:              
+                    break
+            goal_x.append(x)
+            goal_y.append(y)
+
+        return goal_x, goal_y
 
 def do_evaluation():
 
@@ -81,12 +98,13 @@ def my_parser( ):
     parser.add_argument( '--record_vid'  , action = 'store_true'  , dest = "is_record_vid"  ,                        help = 'Record video of the simulation,  with the specified speed'     )
     parser.add_argument( '--save_data'   , action = 'store_true'  , dest = "is_save_data"   ,   default=False,       help = 'Save the details of the simulation'                            )
     parser.add_argument( '--vid_off'     , action = 'store_true'  , dest = "is_vid_off"     ,   default=False,       help = 'Turn off the video'                                            )
-    #parser.add_argument( '--run_opt'     , action = 'store_true'  , dest = "is_run_opt"     ,                        help = 'Run optimization of the simulation'                            )
+
     parser.add_argument('--policy'       , default= "SAC")
-    parser.add_argument("--start_timesteps", default=256, type=int, help="Time steps initial random policy is used")    #25e3
+    parser.add_argument("--start_timesteps", default=300, type=int, help="Time steps initial random policy is used")    #25e3
     parser.add_argument("--max_timesteps", default=1e4, type=int, help="Max time steps to run environment")   #  1e6
     parser.add_argument("--eval_steps", default=10, type=int)
     parser.add_argument("--eval_freq", default=100, type=int)
+    parser.add_argument("--is_oiac", default=True, type=bool, help="OIAC or constant control")
     #SAC params：
     # if too big poor local minima;if too small the model may seem nearly uniform and fail to exploit reward value
     parser.add_argument("--reward_scale", default=100, type=int, help="From 1 to 100 normally") 
@@ -102,9 +120,13 @@ if __name__=="__main__":
     parser = my_parser()
     args, unknown = parser.parse_known_args()
     
+
     my_sim=Simulation(args)
     my_sim.set_camera_pos()
     n = my_sim.n_act
+
+    # generate random target position
+    goal_x, goal_y=random_target()
 
     # refer the model params
     state_dim=my_sim.s_dim
@@ -126,9 +148,12 @@ if __name__=="__main__":
         episode_timesteps = 0
         episode_num = 0
         evaluation_SAC=[]
+        evaluation_train=[]
 
+        hit_tar=0
+        goal=[0,0]
         #  before simulation, the whip downwards and the dist2target is 3.37
-        ini_state=3.2312
+        ini_state=2.8925
         ini_state= my_sim.scale_observation(ini_state)
         
         for t in range(int(args.max_timesteps)):
@@ -137,11 +162,12 @@ if __name__=="__main__":
 
                 action=my_sim.gen_action()
                 init(action)               
-               
+                my_sim.fixed_target()
                 state,reward, done=my_sim.run(action)
+                episode_reward+=reward
                 print("---------------------------------------")
                 print("act:",t,action)
-                print(t,"s",state,"r",reward, "d",done)
+                print(t,"s",state,"r",reward, "d",done, "eps_r",episode_reward)
                 print("target_pos:", target_pos)
                 print("---------------------------------------")
                 next_state=my_sim.scale_observation(state)
@@ -151,33 +177,25 @@ if __name__=="__main__":
                 event[state_dim:state_dim+action_dim] = action
                 event[state_dim + action_dim] = reward
                 event[state_dim + action_dim + 1: e_dim] = next_state
-                episode_reward+=reward
+                
                 agent.memorize(event)
                 ini_state=np.copy(next_state)
                 
                 my_sim.reset()
               
-
             else:
-                done= False
+             
                 event[:state_dim] = ini_state
-
                 cuda_state=torch.FloatTensor(ini_state).to(device)
                 action= agent.act(cuda_state, explore=learn)
                 event[state_dim:state_dim+action_dim] = action.numpy()
 
-                action= my_sim.recover_action(action.numpy())
+                action= my_sim.recover_action(action.numpy())             
                 init(action)
-        
+           
                 state,reward, done=my_sim.run(action)
                 event[state_dim + action_dim] = reward
-
-                # print frequency each 10 episode
-                if t% args.print_freq==0:
-                    print("---------------------------------------")
-                    print("sac t:\n",t,"sac act:",action,"\n", "sac s:",state,"sac reward", reward)
-                    print("training_target_pos:", target_pos)
-                    print("---------------------------------------")
+                train_pos=goal+np.array([1.78,0])
 
                 next_state=my_sim.scale_observation(state)
                 event[state_dim + action_dim + 1: e_dim] = next_state
@@ -186,25 +204,43 @@ if __name__=="__main__":
                 ini_state=np.copy(next_state)
                 episode_reward+=reward
                 episode_timesteps+=1
-                agent.learn()
+                #agent.learn()
+                evaluation_train.append(episode_reward)
+                np.save(f"./results/{file_name}_{args.is_oiac}_training", evaluation_train)
 
-                if done:
-                    
-                    print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
-                    print("action:",my_sim.recover_action(action))
-                    print("Hit it but it is training time! :)")
-                    
-                    done = False
-                    episode_reward = 0
-                    episode_timesteps = 0
+                # print frequency each 10 episode
+                #if t% args.print_freq==0:
+                print("---------------------------------------")
+                print("sac t:",t,"\nact:",action,"\nsac reward", reward,"\nevaluation reward: ",episode_reward)
+                print("training_target_pos:", train_pos)
+                print("index",my_sim.tar_p)
+                print("---------------------------------------")
+
+                if reward>-3:
+
+                    hit_tar+=1
+                    print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")               
+                    np.savetxt(f"./save_action/{file_name}+{args.is_oiac}+{t}+{train_pos}",action)                    
+                              
                     episode_num += 1
+                    episode_timesteps=0
+
+                    my_sim.reset()
+                    goal= [goal_x[hit_tar],goal_y[hit_tar]]
+                    my_sim.target_move(goal)
+
+                                     
                 else:
                     my_sim.reset()
-                    my_sim.target_move(done)
+                    my_sim.target_move(goal)
 
-            #Evaluation SAC
-            if t>= args.start_timesteps and (t + 1) % args.eval_freq == 0:
-                do_evaluation()
+                
+                   
+                    
+
+            # #Evaluation SAC
+            # if t>= args.start_timesteps and (t + 1) % args.eval_freq == 0:
+            #     do_evaluation()
                
 
 
