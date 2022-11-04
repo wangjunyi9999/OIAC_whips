@@ -1,7 +1,11 @@
-""" this main file without any ML methods, just a pure mujoco env for random target"""
+""" 
+this main file without any ML methods, just a pure mujoco env for fixed target 2.28
+if oiac, 130th hit the target Optimal Values [-1.04719755 -2.0943951   1.04719755  1.31222903  0.71666667] Result 0.09899035180411059
+if not, 38th hit it Optimal Values [-1.04719755 -1.04719755  1.57079633  0.87266463  1.05      ] Result 0.09384599153710946
+"""
 import numpy as np
 import argparse
-
+import nlopt
 from modules.simulation import Simulation
 from modules.utils import make_whip_downwards
 
@@ -28,8 +32,8 @@ def my_parser( ):
     parser.add_argument( '--save_data'   , action = 'store_true'  , dest = "is_save_data"   ,   default=False,       help = 'Save the details of the simulation'                            )
     parser.add_argument( '--vid_off'     , action = 'store_true'  , dest = "is_vid_off"     ,   default=False,       help = 'Turn off the video'                                            )
     parser.add_argument( '--run_opt'     , action = 'store_true'  , dest = "is_run_opt"     ,                        help = 'Run optimization of the simulation'                            )
-    parser.add_argument("--is_oiac", default=False, type=bool, help="OIAC or constant control")
-    #parser.add_argument('--is_oiac',          default= True,          help='Start OIAC or not')
+    parser.add_argument("--is_oiac",  default=False, type=bool, help="OIAC or constant control")
+    parser.add_argument("--opt_name", default='nlopt')
     return parser
 
 if __name__=="__main__":
@@ -53,47 +57,52 @@ if __name__=="__main__":
     
 
     """
-    
+    file_name=args.opt_name
+    # iteration, optimal value and input parameters
+    iter_arr = []
+    opt_val_arr = []
+    input_par_arr = []
+
     my_sim=Simulation(args)
-
+    #using V2 action space
+    lb=my_sim.action_space_low
+    ub=my_sim.action_space_high
+    nl_init=(lb+ub)*0.5
+    n_opt=5
     target_pos=my_sim.mj_data.body_xpos[-1]
-    sum_reward=0
-    for epoch in range(1):
 
-        
+    opt=nlopt.opt(nlopt.GN_DIRECT_L, n_opt)
+    iter=0
+
+    def nlopt_obj(mov_arrs,grad):
         n = my_sim.n_act
-
-        #mov_arrs=my_sim.gen_action()
-        #mov_arrs=[-1.36135682,  0.4712389 ,  1.04719755 , 0.15707963  ,1.07222222]
-        #mov_arrs=[-1.04719755, -2.0943951,   1.04719755,  1.31222903,  0.71666667] #oiac
-        mov_arrs=[-1.04719755, -1.04719755,  1.57079633,  0.87266463 , 1.05      ]# no oiac
         init_cond = { "qpos": mov_arrs[ :n ] ,  "qvel": np.zeros( n ) }
         my_sim.init( qpos = init_cond[ "qpos" ], qvel = init_cond[ "qvel" ] )
         my_sim.set_camera_pos()
         
-        make_whip_downwards( my_sim )       
-        my_sim.forward( )       
-        s,r,done=my_sim.run(mov_arrs)
-        print(epoch, mov_arrs, s)
-        print("tar:",target_pos)
-        sum_reward+=r
-
-        if done:
-           
-            my_sim.reset()
-        else:
-            my_sim.reset()
-            
+        make_whip_downwards( my_sim )
         
-        epoch+=1
-        print("sum:",sum_reward)
-        # in order to save the k, b data
-        np.save(f"tmp_k_{args.is_oiac}",my_sim.tmp_K)
-        np.save(f"tmp_b_{args.is_oiac}",my_sim.tmp_B)
-        np.save(f"tmp_v_{args.is_oiac}",my_sim.tmp_verr)
-        np.save(f"tmp_p_{args.is_oiac}",my_sim.tmp_perr)
+        my_sim.forward( )
+        
+        s,r,done=my_sim.run(mov_arrs)
 
-        #print("K",my_sim.tmp_K, "B",my_sim.tmp_B)
-        #np.savetxt(fname='data.csv', X=my_sim.tmp_K, delimiter=",")
+        print("Iteration:",opt.get_numevals()+1,"opt_vals:",s)
+        iter_arr.append( opt.get_numevals( ) + 1 )
+        input_par_arr.append( np.copy( mov_arrs[ : ] ) )
+        opt_val_arr.append(s)
+        my_sim.reset()
+        return s
+
+    opt.set_lower_bounds( lb )
+    opt.set_upper_bounds( ub )
+    opt.set_maxeval( 600 )
+
+    opt.set_min_objective( nlopt_obj )
+    opt.set_stopval( 0.1 ) 
+
+    xopt = opt.optimize( nl_init )
+    np.save(f"./classic_control_res/{file_name}_{args.is_oiac}",opt_val_arr)
+    print( "Optimal Values",xopt[ : ], "Result", opt.last_optimum_value( ) )
+
        
-    my_sim.close()
+    

@@ -45,7 +45,7 @@ class Simulation:
         # The current time, time-step (step_t), start time of the controller (ts) and total runtime (T) of the simulation
         self.t   = 0
         self.step_t  = self.mj_model.opt.timestep                                                  
-        self.stop_t= 0.4
+        self.stop_t= 0.6
 
         limb_names = [ "_".join( name.split( "_" )[ 1 : ] ) for name in self.mj_model.body_names if "body" and "arm" in name ]
         self.M  = { name: get_model_prop( self.mj_model, "body", name, "mass"    ) for name in limb_names }
@@ -62,16 +62,16 @@ class Simulation:
         self.save_step  = round( ( 1. / self.step_t ) / self.args.save_freq  )   
 
         # action low and high boundary
-        self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, 0.25*np.pi, 0.3])
-        self.action_space_high=np.array([-0.25*np.pi, -0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
+        # self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, 0.25*np.pi, 0.3])
+        # self.action_space_high=np.array([-0.25*np.pi, -0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
 
         # change boundary V1
         # self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, -0.25*np.pi, 0.3])
         # self.action_space_high=np.array([-0.25*np.pi, 0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
         
         # #change boundary V2 mose version
-        # self.action_space_low=np.array( [ -0.5 * np.pi,    0.0, -0.5 * np.pi, 0.0, 0.4 ] ) 
-        # self.action_space_high=np.array( [ -0.1 * np.pi,   0.9 * np.pi,  0.5 * np.pi, 0.9 * np.pi, 1.5 ] )
+        self.action_space_low=np.array( [ -0.5 * np.pi,    0.0, -0.5 * np.pi, 0.0, 0.4 ] ) 
+        self.action_space_high=np.array( [ -0.1 * np.pi,   0.9 * np.pi,  0.5 * np.pi, 0.9 * np.pi, 1.5 ] )
 
         # obs_high 2.38*2
         self.obs_low=np.array([1e-2])
@@ -289,7 +289,10 @@ class Simulation:
         self.step_qvel=qvel
         self.set_state(qpos, qvel)
 
-          
+        
+
+
+       
     def step_reset_model(self):
         """
             Reset qpos qvel but keep the target stay the same pos 
@@ -332,6 +335,7 @@ class Simulation:
     def run( self, action ):
 
         dist_mov=[]
+        dist_stop=[]
         min_dist1=[1e5]
         min_dist2=[1e5]
 
@@ -342,23 +346,30 @@ class Simulation:
         self.tmp_perr=[]
 
         # The main loop of the simulation 
-        while self.t <= action[4]+self.stop_t:
+        while self.t <= action[4] + self.stop_t:
         
             if self.n_steps % self.vid_step == 0:
                 self.mj_viewer.render( )
-  
-            """ # use oiac or constant""" 
-            tau= self.get_tau(action, self.t, is_oiac=self.is_oiac)
-            self.mj_data.ctrl[ :self.n_act ] = tau
-            
-            dist_mov.append(self.dist2tip())
-            min_dist1=min(dist_mov)
 
-            # # for test K, B
-            self.tmp_K.append(self.Kq)
-            self.tmp_B.append(self.Bq)
-            self.tmp_perr.append(self.q_err)
-            self.tmp_verr.append(self.v_err)
+            if self.t>action[4]:
+                
+                self.mj_data.qvel[:self.n_act]=0
+                dist_stop.append(self.dist2tip())
+                min_dist2=min(dist_stop)
+
+            else:     
+                """ # use oiac or constant""" 
+                tau= self.get_tau(action, self.t, is_oiac=self.is_oiac)
+                self.mj_data.ctrl[ :self.n_act ] = tau
+                
+                dist_mov.append(self.dist2tip())
+                min_dist1=min(dist_mov)
+
+                # # for test K, B
+                self.tmp_K.append(self.Kq)
+                self.tmp_B.append(self.Bq)
+                self.tmp_perr.append(self.q_err)
+                self.tmp_verr.append(self.v_err)
             # Update the step
             self.mj_sim.step( )
 
@@ -404,8 +415,8 @@ class Simulation:
         self.q0  = np.zeros( self.n_act )
         self.dq0 = np.zeros( self.n_act )
         
-        # self.sum_step=1e-8
-        self.q0, self.dq0= self.min_jerk( action, t)
+        self.sum_step=1e-8
+        self.q0, self.dq0= self.min_jerk( action, t+self.sum_step)
 
         
         # TODO track_err beta should be multiply where? now following the code rather than paper
@@ -452,24 +463,21 @@ class Simulation:
         end_pos_2= a[3]
         D= a[4]
         
-        if sum_step<=D:
-            pos_1_desire=  ini_pos_1+ (end_pos_1- ini_pos_1)*((10* (sum_step/D)**3)-\
-                15* (sum_step/D)**4+ 6*(sum_step/D)**5)
 
-            pos_2_desire=  ini_pos_2+ (end_pos_2- ini_pos_2)*((10* (sum_step/D)**3)-\
-                15* (sum_step/D)**4+ 6*(sum_step/D)**5)
+        pos_1_desire=  ini_pos_1+ (end_pos_1- ini_pos_1)*((10* (sum_step/D)**3)-\
+            15* (sum_step/D)**4+ 6*(sum_step/D)**5)
 
-            vel_1_desire= 1.0/D *(end_pos_1- ini_pos_1)* (30*(sum_step/D)**2-\
-                60*(sum_step/D)**3 + 30*(sum_step/D)**4)
+        pos_2_desire=  ini_pos_2+ (end_pos_2- ini_pos_2)*((10* (sum_step/D)**3)-\
+            15* (sum_step/D)**4+ 6*(sum_step/D)**5)
 
-            vel_2_desire= 1.0/D *(end_pos_2- ini_pos_2)* (30*(sum_step/D)**2-\
-                60*(sum_step/D)**3 + 30*(sum_step/D)**4)
+        vel_1_desire= 1.0/D *(end_pos_1- ini_pos_1)* (30*(sum_step/D)**2-\
+            60*(sum_step/D)**3 + 30*(sum_step/D)**4)
 
-            pos_d=np.array([pos_1_desire, pos_2_desire])
-            vel_d=np.array([vel_1_desire, vel_2_desire])
-        else:
-            pos_d=np.array([end_pos_1,end_pos_2])
-            vel_d=np.array([0,0])
+        vel_2_desire= 1.0/D *(end_pos_2- ini_pos_2)* (30*(sum_step/D)**2-\
+            60*(sum_step/D)**3 + 30*(sum_step/D)**4)
+
+        pos_d=np.array([pos_1_desire, pos_2_desire])
+        vel_d=np.array([vel_1_desire, vel_2_desire])
 
 
         return pos_d,vel_d
