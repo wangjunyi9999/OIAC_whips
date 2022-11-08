@@ -1,10 +1,11 @@
 """ this main file without any ML methods, just a pure mujoco env for random target"""
 import numpy as np
 import argparse
-import nlopt
 from modules.simulation import Simulation
 from modules.utils import make_whip_downwards
 import cvxpy as cp
+from cvxpylayers.torch import CvxpyLayer
+import torch
 
 def my_parser( ):
     # Argument Parsers
@@ -38,22 +39,6 @@ if __name__=="__main__":
     parser = my_parser()
     args, unknown = parser.parse_known_args()
 
-    """
-    random 5 steps:                                                    without oiac             with OIAC:
-    0 [-2.22926145  0.46806557  2.19752819  0.76953153  0.88181818] -4.352888946549483      -2.739950911112423
-    tar: [2.3 0.  0. ]
-    1 [-1.05513087 -2.00712864  1.94366212  0.32526591  0.85454545] -6.254406894837641      -5.52748301834349
-    tar: [2.3 0.  0. ]
-    2 [-2.11819505  0.08726646  1.91192886 -0.65846513  0.34545455] -8.808428914851936      -8.956312739422414
-    tar: [2.3 0.  0. ]
-    3 [-1.24553042  0.02379994  1.16619727  1.1820639   0.82727273] -0.322569376186182      -0.42066986777712095
-    tar: [2.3 0.  0. ]
-    4 [-1.15033064  0.56326535  0.9123312  -0.15073298  1.10909091] -3.6395717355811947         50
-    tar: [2.3 0.  0. ]
-    sum:                                                            -23.377865868006435         >0
-    
-
-    """
     file_name=args.opt_name
     # iteration, optimal value and input parameters
     iter_arr = []
@@ -89,22 +74,65 @@ if __name__=="__main__":
         my_sim.reset()
         return s
 
-    # opt.set_lower_bounds( lb )
-    # opt.set_upper_bounds( ub )
-    # opt.set_maxeval( 600 )
+    def update_action(nl_init):
 
-    # opt.set_min_objective( nlopt_obj )
-    # opt.set_stopval( 0.1 ) 
+        nl_init=torch.tensor(nl_init)
+        nl_init=nl_init+torch.randn_like(nl_init)
+        return nl_init.numpy().tolist
 
-    # xopt = opt.optimize( nl_init )
-    # np.save(f"./classic_control_res/{file_name}_{args.is_oiac}",opt_val_arr)
-    # print( "Optimal Values",xopt[ : ], "Result", opt.last_optimum_value( ) )
+    def loss(time_horizon, batch_size,nl_init,seed=None):
+        if seed is not None:
+            torch.manual_seed(seed)
+        
+        action=torch.zeros(batch_size,n_opt)
+        for index in range(n_opt):
+            action[:,index]=torch.zeros(m)
+            action[:,index]=nl_init[index]
+        loss=0
+        q0i=action[:,0]
+        q1i=action[:,1]
+        q0f=action[:,2]
+        q1f=action[:,3]
+        t=action[:,4]
+        for _ in range(time_horizon):
+            x,_=policy(q0i,q1i,q0f,q1f,t,solver_args={"acceleration_lookback": 0})
+            s=nlopt_obj(nl_init)
+            loss+=(0-s)
+            nl_init=update_action(nl_init)
+        return loss
+
     x=cp.Variable(n_opt)
+    m=1
+    q0i = cp.Parameter(m)
+    q1i = cp.Parameter(m)
+    q0f = cp.Parameter(m)
+    q1f = cp.Parameter(m)
+    t = cp.Parameter(m)
+
+    s=2.9
+    objective=cp.Minimize(s)
+    constraints=[0<=x-lb, ub-x>=0]
+    prob= cp.Problem(objective, constraints)
+    print(prob.parameters())
+    
+    policy= CvxpyLayer(prob,[q0i,q1i,q0f,q1f,t],[x])
+
+    time_horizon=1
+    batch_size=1
+    params=[x]
+    opt = torch.optim.SGD(params, lr=.1)
+    losses=[]
+
     for t in range(10):
-        s=nlopt_obj(nl_init)
-        objective=cp.Minimize(s)
-        constraints=[0<=x-lb, ub-x>=0]
-        prob= cp.Problem(objective, constraints)
+        with torch.optim.no_grad():
+            test_loss=loss(time_horizon, batch_size, x, seed=0)
+            losses.append(test_loss)
+
+        opt.zero_grad()
+        l=loss(time_horizon, batch_size, seed=0)
+        l.backward()
+        torch.nn.utils.clip_grad_norm_(params, 10)
+        opt.step()
         print("Optimal value", prob.solve())
         print("Optimal var",x.value)
 

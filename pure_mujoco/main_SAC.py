@@ -107,7 +107,7 @@ def my_parser( ):
     parser.add_argument("--max_timesteps", default=15000, type=int, help="Max time steps to run environment")   #  1e6
     parser.add_argument("--eval_steps", default=10, type=int)
     parser.add_argument("--eval_freq", default=100, type=int)
-    parser.add_argument("--is_oiac", default=True, type=bool, help="OIAC or constant control")
+    parser.add_argument("--is_oiac", default=False, type=bool, help="OIAC or constant control")
     #SAC params：
 
     parser.add_argument("--expl_noise", default=0.1, type=float)     # Std of Gaussian exploration noise

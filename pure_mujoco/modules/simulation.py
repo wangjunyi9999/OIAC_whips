@@ -111,7 +111,7 @@ class Simulation:
         
 
     def gen_action(self):
-        
+        # replace true means the same data can be selected
         action= np.empty(shape=self.a_dim, dtype=float)
         
         
@@ -349,7 +349,8 @@ class Simulation:
   
             """ # use oiac or constant""" 
             tau= self.get_tau(action, self.t, is_oiac=self.is_oiac)
-            self.mj_data.ctrl[ :self.n_act ] = tau
+            
+            self.mj_data.ctrl[ :self.n_act ] = list(np.array(tau).flatten())[:2]
             
             dist_mov.append(self.dist2tip())
             min_dist1=min(dist_mov)

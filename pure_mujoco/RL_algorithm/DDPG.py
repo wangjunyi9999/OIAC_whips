@@ -22,7 +22,10 @@ def weight_init(m):
 		mid = m.weight.size(2) // 2
 		gain = nn.init.calculate_gain("relu")
 		nn.init.orthogonal_(m.weight.data[:, :, mid, mid], gain)
-
+def gaussian_logprob(noise, log_std):
+	"""Compute Gaussian log probability."""
+	residual = (-0.5 * noise.pow(2) - log_std).sum(-1, keepdim=True)
+	return residual - 0.5 * np.log(2 * np.pi) * noise.size(-1)
 
 # Returns continuous actions for given states
 class Actor(nn.Module):
@@ -44,8 +47,20 @@ class Actor(nn.Module):
 	def forward(self, state):
 		a = F.relu(self.l1(state))
 		a = F.relu(self.l2(a))
+		mu_a=self.l3(a)
+		log_std_a =self.l3(a)
+		log_std_a = torch.clamp(log_std_a, -20, 2)
+		std_a = torch.exp(log_std_a)
+
+		
+		noise=torch.randn_like(mu_a,requires_grad=True)
+		z = mu_a + noise * std_a  # reparameterization trick
+		action=torch.tanh(z)
+		logp_pi = gaussian_logprob(noise, log_std_a).sum(axis=-1)
+		logp_pi = logp_pi - (1.0 - action**2).clamp(min=1e-6).log().sum(axis=-1)
+		
 		# a= a + torch.randn_like(a)
-		return self.max_action * torch.tanh(self.l3(a))
+		return self.max_action * action, logp_pi
 
 
 # Return Q-value for given state/action pairs
@@ -97,15 +112,19 @@ class DDPG(object):
 
 	def select_action(self, state):
 		state = torch.as_tensor(state.reshape(1, -1), device=device, dtype=torch.float32)
-		return self.actor(state).cpu().data.numpy().flatten()
+		action, _ = self.actor(state)
+		return action.cpu().data.numpy().flatten()
 
 	def train(self, replay_buffer, batch_size=256):
 		# Sample batches from replay buffer 
 		state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 
 		# Compute the target Q value
-		target_Q = self.critic_target(next_state, self.actor_target(next_state))
-		target_Q = reward + (not_done * self.discount * target_Q).detach()
+		with torch.no_grad():
+			next_action, logp_pi_next_action=self.actor_target(next_state)
+			target_Q = self.critic_target(next_state, next_action)
+			target_Q = reward + (not_done * self.discount * target_Q).detach()
+			logp_pi_next_action = torch.unsqueeze(logp_pi_next_action, dim=1)
 
 		# Get current Q estimates
 		current_Q = self.critic(state, action)
@@ -119,7 +138,10 @@ class DDPG(object):
 		self.critic_optimizer.step()
 
 		# Compute actor loss
-		actor_loss = -self.critic(state, self.actor(state)).mean()
+		action, logp_pi_action = self.actor(state)
+		logp_pi_action = torch.unsqueeze(logp_pi_action, dim=1)
+		Q_pi=self.critic(state, action)
+		actor_loss = (0.2 * logp_pi_action-Q_pi).mean()
 		
 		# Optimize the actor 
 		self.actor_optimizer.zero_grad()
