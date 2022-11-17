@@ -1,4 +1,7 @@
-""" this main file without any ML methods, just a pure mujoco env for random target"""
+""" 
+remeber to change the file saving format
+this main file without any ML methods, just a pure mujoco env for random target
+"""
 import numpy as np
 import argparse
 from modules.simulation import Simulation
@@ -181,15 +184,15 @@ class GA:
     
             if best_ind['fitness'] >self.bestindividual['fitness']:
                 self.bestindividual = best_ind
-                self.best.append(self.bestindividual['fitness'])
-            print("Best individual found is {}, {}".format(self.bestindividual['Gene'].data,
+            self.best.append((1-(self.bestindividual['fitness']))*self.maxdist)# transfer the normal distance
+            print("Best individual found is {}, its fitness is {:.3f}".format(self.bestindividual['Gene'].data,
                                                         self.bestindividual['fitness']))
             print("  Max fitness of current pop: {}".format(max(fits)))
 
-            if self.bestindividual['fitness']>=0.98:
+            if self.bestindividual['fitness']>=0.9:
                 break
         print("------ End of (successful) evolution ------")
-        np.save('GA_res.npy')
+        np.save('GA_result.npy',self.best)
 
 if __name__=="__main__":
 

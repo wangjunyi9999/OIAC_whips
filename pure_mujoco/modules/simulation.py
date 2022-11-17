@@ -5,7 +5,6 @@ from modules.utils     import *
 import math
 import random
 
-
 class Simulation:
     """
         Running a single Whip Simulation
@@ -207,7 +206,6 @@ class Simulation:
 
         self.mj_sim.reset( )
     
-
     def diamond_target_move(self, done):
         """
             define a rhombus shape, consisting by 25 points 
@@ -270,8 +268,6 @@ class Simulation:
 
         return goal
 
-    
-
     def target_move(self,goal):
 
         """
@@ -309,7 +305,6 @@ class Simulation:
         self.mj_data.qvel[:] = np.copy(qvel)
         self.mj_sim.forward( )
         
-
     def close( self ):
         """ 
             Wrapping up the simulation
@@ -498,13 +493,6 @@ class Simulation:
             tau_G += np.dot( d.get_site_jacp( "_".join( [ "site", name, "COM" ] ) ).reshape( 3, -1 )[ :, 0 : self.n_act ].T, - self.M[ name ] * self.g  )
         
         return tau_G 
-
-    def is_sim_unstable( self ):
-        """ 
-            Check whether the simulation is stable. 
-            If the acceleration exceeds some threshold value, then halting the simulation 
-        """
-        return True if max( abs( self.mj_data.qacc ) ) > 10 ** 6 else False
 
     def step( self ):
         """

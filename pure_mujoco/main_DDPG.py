@@ -102,16 +102,16 @@ def my_parser( ):
 
     parser.add_argument('--policy'       , default= "DDPG")
     parser.add_argument('--seed'         , default=0, type=int)
-    parser.add_argument("--start_timesteps", default=30, type=int, help="Time steps initial random policy is used")    #25e3
+    parser.add_argument("--start_timesteps", default=2000, type=int, help="Time steps initial random policy is used")    #25e3
     parser.add_argument("--max_timesteps", default=15000, type=int, help="Max time steps to run environment")   #  1e6
     parser.add_argument("--eval_steps", default=10, type=int)
     parser.add_argument("--eval_freq", default=100, type=int)
-    parser.add_argument("--is_oiac", default=True, type=bool, help="OIAC or constant control")
+    parser.add_argument("--is_oiac", default=False, type=bool, help="OIAC or constant control")
     #SAC params：
 
     parser.add_argument("--expl_noise", default=0.1, type=float)     # Std of Gaussian exploration noise
-    parser.add_argument("--batch_size", default=20, type=int)       # Batch size for both actor and critic
-    parser.add_argument("--alpha", default=0.2, type=float)          # For SAC entropy     # it is 1/reward, so if the reward is too big poor local minima; if it is too small, the model may seem nearly uniform and fail to exploit reward value
+    parser.add_argument("--batch_size", default=256, type=int)       # Batch size for both actor and critic
+    parser.add_argument("--alpha", default=0.3, type=float)          # For SAC entropy     # it is 1/reward, so if the reward is too big poor local minima; if it is too small, the model may seem nearly uniform and fail to exploit reward value
     parser.add_argument("--discount", default=0.99, type=float)      # Discount factor
     parser.add_argument("--tau", default=0.005, type=float)          # Target network update rate
     #TD3 PARAMS:

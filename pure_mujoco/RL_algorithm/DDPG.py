@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Implementation of Deep Deterministic Policy Gradients (DDPG)
-# Paper: https://arxiv.org/abs/1509.02971
+# Implementation of Soft Actor-Critic (SAC)
+# Paper: https://arxiv.org/abs/1801.01290
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -22,6 +22,10 @@ def weight_init(m):
 		mid = m.weight.size(2) // 2
 		gain = nn.init.calculate_gain("relu")
 		nn.init.orthogonal_(m.weight.data[:, :, mid, mid], gain)
+
+LOG_STD_MAX = 2
+LOG_STD_MIN = -20
+
 def gaussian_logprob(noise, log_std):
 	"""Compute Gaussian log probability."""
 	residual = (-0.5 * noise.pow(2) - log_std).sum(-1, keepdim=True)
@@ -40,30 +44,39 @@ class Actor(nn.Module):
 
 		self.l1 = nn.Linear(state_dim, hidden_dim)
 		self.l2 = nn.Linear(hidden_dim, hidden_dim)
-		self.l3 = nn.Linear(hidden_dim, action_dim)
+		self.mean = nn.Linear(hidden_dim, action_dim)
+		self.log_std = nn.Linear(hidden_dim, action_dim)
 		self.max_action = max_action
+		# self.soft_plus = nn.Softplus()
 		self.apply(weight_init)
 
-	def forward(self, state):
+	def forward(self, state, deterministic=False, with_logprob=True):
 		a = F.relu(self.l1(state))
 		a = F.relu(self.l2(a))
-		mu_a=self.l3(a)
-		log_std_a =self.l3(a)
-		log_std_a = torch.clamp(log_std_a, -20, 2)
+		mu_a = self.mean(a)
+		log_std_a = self.log_std(a)
+		log_std_a = torch.clamp(log_std_a, LOG_STD_MIN, LOG_STD_MAX)
 		std_a = torch.exp(log_std_a)
+		# Only used for evaluating policy at test time.
+		if deterministic:
+			z = mu_a
+		else:
+			noise = torch.randn_like(mu_a, requires_grad=True)  # sampled from guassian distribution
+			z = mu_a + noise * std_a  # reparameterization trick
+		action = torch.tanh(z) 
 
-		
-		noise=torch.randn_like(mu_a,requires_grad=True)
-		z = mu_a + noise * std_a  # reparameterization trick
-		action=torch.tanh(z)
-		logp_pi = gaussian_logprob(noise, log_std_a).sum(axis=-1)
-		logp_pi = logp_pi - (1.0 - action**2).clamp(min=1e-6).log().sum(axis=-1)
-		
-		# a= a + torch.randn_like(a)
+		if with_logprob and not deterministic:
+			logp_pi = gaussian_logprob(noise, log_std_a).sum(axis=-1)
+			# logp_pi -= (
+			# 	np.log(2.0) - (action + self.soft_plus(-2.0 * action)).sum(axis=-1)
+			# ) * 2.0
+			logp_pi = logp_pi - (1.0 - action**2).clamp(min=1e-6).log().sum(axis=-1)
+		else:
+			logp_pi = None
 		return self.max_action * action, logp_pi
 
 
-# Return Q-value for given state/action pairs
+# Returns Q-value for given state/action pairs
 class Critic(nn.Module):
 	def __init__(
 		self, 
@@ -72,20 +85,28 @@ class Critic(nn.Module):
 		hidden_dim: int = 256
 	):
 		super(Critic, self).__init__()
-		# Q architecture
+		# Q1 architecture
 		self.l1 = nn.Linear(state_dim + action_dim, hidden_dim)
 		self.l2 = nn.Linear(hidden_dim, hidden_dim)
 		self.l3 = nn.Linear(hidden_dim, 1)
 
+		# Q2 architecture
+		self.l4 = nn.Linear(state_dim + action_dim, hidden_dim)
+		self.l5 = nn.Linear(hidden_dim, hidden_dim)
+		self.l6 = nn.Linear(hidden_dim, 1)
 		self.apply(weight_init)
 
 	def forward(self, state, action):
 		sa = torch.cat([state, action], dim=1)
-		q = F.relu(self.l1(sa))
-		q = F.relu(self.l2(q))
-		q = self.l3(q)
 
-		return q
+		q1 = F.relu(self.l1(sa))
+		q1 = F.relu(self.l2(q1))
+		q1 = self.l3(q1)
+
+		q2 = F.relu(self.l4(sa))
+		q2 = F.relu(self.l5(q2))
+		q2 = self.l6(q2)
+		return q1, q2
 
 
 class DDPG(object):
@@ -96,10 +117,10 @@ class DDPG(object):
 		max_action: float = 1.0,
 		discount: float = 0.99,
 		tau: float = 0.005,
+		alpha: float = 0.2,
 		hidden_dim: int = 256,
 	):
 		self.actor = Actor(state_dim, action_dim, max_action, hidden_dim).to(device)
-		self.actor_target = copy.deepcopy(self.actor)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
 
 		self.critic = Critic(state_dim, action_dim, hidden_dim).to(device)
@@ -109,10 +130,11 @@ class DDPG(object):
 		self.max_action = max_action
 		self.discount = discount
 		self.tau = tau
+		self.alpha = alpha
 
-	def select_action(self, state):
+	def select_action(self, state, deterministic=False):
 		state = torch.as_tensor(state.reshape(1, -1), device=device, dtype=torch.float32)
-		action, _ = self.actor(state)
+		action, _ = self.actor(state, deterministic, False)
 		return action.cpu().data.numpy().flatten()
 
 	def train(self, replay_buffer, batch_size=256):
@@ -121,16 +143,19 @@ class DDPG(object):
 
 		# Compute the target Q value
 		with torch.no_grad():
-			next_action, logp_pi_next_action=self.actor_target(next_state)
-			target_Q = self.critic_target(next_state, next_action)
-			target_Q = reward + (not_done * self.discount * target_Q).detach()
+			# Select action according to policy 
+			next_action, logp_pi_next_action = self.actor(next_state)
 			logp_pi_next_action = torch.unsqueeze(logp_pi_next_action, dim=1)
+			# Compute the target Q value
+			target_Q1, target_Q2 = self.critic_target(next_state, next_action)
+			target_Q = torch.min(target_Q1, target_Q2)
+			target_Q = reward + not_done * self.discount * (target_Q - self.alpha * logp_pi_next_action)
 
 		# Get current Q estimates
-		current_Q = self.critic(state, action)
+		current_Q1, current_Q2 = self.critic(state, action)
 
 		# Compute critic loss
-		critic_loss = F.mse_loss(current_Q, target_Q)
+		critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
 		# Optimize the critic
 		self.critic_optimizer.zero_grad()
@@ -140,19 +165,17 @@ class DDPG(object):
 		# Compute actor loss
 		action, logp_pi_action = self.actor(state)
 		logp_pi_action = torch.unsqueeze(logp_pi_action, dim=1)
-		Q_pi=self.critic(state, action)
-		actor_loss = (0.2 * logp_pi_action-Q_pi).mean()
+		Q1_pi, Q2_pi = self.critic(state, action)
+		Q_pi = torch.min(Q1_pi, Q2_pi)
+		actor_loss = (self.alpha * logp_pi_action - Q_pi).mean()
 		
-		# Optimize the actor 
+		# Optimize the actor
 		self.actor_optimizer.zero_grad()
 		actor_loss.backward()
 		self.actor_optimizer.step()
 
 		# Update the frozen target models
 		for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
-			target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
-		for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
 			target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
 	# save the model
@@ -164,6 +187,4 @@ class DDPG(object):
 	def load(self, filename):
 		self.critic.load_state_dict(torch.load(filename + "_critic", map_location=device))
 		self.critic_target = copy.deepcopy(self.critic)
-
 		self.actor.load_state_dict(torch.load(filename + "_actor", map_location=device))
-		self.actor_target = copy.deepcopy(self.actor)
