@@ -1,7 +1,7 @@
 """ this main file without any ML methods, just a pure mujoco env for random target"""
 import numpy as np
 import argparse
-
+from numpy import *
 from modules.simulation import Simulation
 from modules.utils import make_whip_downwards
 
@@ -10,7 +10,7 @@ def my_parser( ):
     parser = argparse.ArgumentParser( description = 'Parsing the arguments for running the simulation' )
     #parser.add_argument( '--version'     , action = 'version'     , version = Constants.VERSION )
     parser.add_argument( '--start_time'  , action = 'store'       , type = float ,  default = 0.0,                   help = 'Start time of the controller'                                                      )
-    parser.add_argument( '--model_name'  , action = 'store'       , type = str   ,  default = '2D_model_w_whip' ,    help = 'Model name for the simulation'                                                     )
+    parser.add_argument( '--model_name'  , action = 'store'       , type = str   ,  default = '2D_model_w_whip_drl', help = 'Model name for the simulation'                                                     )
     parser.add_argument( '--ctrl_name'   , action = 'store'       , type = str   ,  default = 'joint_imp_ctrl',      help = 'Model name for the simulation'                                                     )
     parser.add_argument( '--cam_pos'     , action = 'store'       , type = str   ,                                   help = 'Get the whole list of the camera position'                                         )
     parser.add_argument( '--mov_pars'    , action = 'store'       , type = str   ,                                   help = 'Get the whole list of the movement parameters'                                     )
@@ -28,12 +28,12 @@ def my_parser( ):
     parser.add_argument( '--save_data'   , action = 'store_true'  , dest = "is_save_data"   ,   default=False,       help = 'Save the details of the simulation'                            )
     parser.add_argument( '--vid_off'     , action = 'store_true'  , dest = "is_vid_off"     ,   default=False,       help = 'Turn off the video'                                            )
     parser.add_argument( '--run_opt'     , action = 'store_true'  , dest = "is_run_opt"     ,                        help = 'Run optimization of the simulation'                            )
-    parser.add_argument("--is_oiac", default=False, type=bool, help="OIAC or constant control")
+    parser.add_argument("--is_oiac", default=True, type=bool, help="OIAC or constant control")
     #parser.add_argument('--is_oiac',          default= True,          help='Start OIAC or not')
     return parser
 
 if __name__=="__main__":
-
+    np.random.seed(0)
     parser = my_parser()
     args, unknown = parser.parse_known_args()
 
@@ -59,28 +59,33 @@ if __name__=="__main__":
     target_pos=my_sim.mj_data.body_xpos[-1]
     sum_reward=0
     for epoch in range(1):
-
         
         n = my_sim.n_act
 
         #mov_arrs=my_sim.gen_action()
-        #mov_arrs=[-1.36135682,  0.4712389 ,  1.04719755 , 0.15707963  ,1.07222222]
-        #mov_arrs=[-1.04719755, -2.0943951,   1.04719755,  1.31222903,  0.71666667] #oiac
-        mov_arrs=[-1.04719755, -1.04719755,  1.57079633,  0.87266463 , 1.05      ]# no oiac
+        # this is for the true mov_arrs tau theta
+        mov_arrs=[-1.467776894569396973e+00,2.128601372241973877e-01,1.246050119400024414e+00,8.783212900161743164e-01,1.402317047119140625e+00]
+        # this is for the false mov_arrs tau theta
+        #mov_arrs=[-1.431458353996276855e+00,6.976974755525588989e-02,1.412713766098022461e+00,1.069405674934387207e+00,1.393481254577636719e+00]
+    
         init_cond = { "qpos": mov_arrs[ :n ] ,  "qvel": np.zeros( n ) }
+
         my_sim.init( qpos = init_cond[ "qpos" ], qvel = init_cond[ "qvel" ] )
         my_sim.set_camera_pos()
         
-        make_whip_downwards( my_sim )       
-        my_sim.forward( )       
+        make_whip_downwards(my_sim)
+            
         s,r,done=my_sim.run(mov_arrs)
         print(epoch, mov_arrs, s)
         print("tar:",target_pos)
+       
+        # print(my_sim.mj_data.body_xpos[:],"tip",my_sim.mj_data.body_xpos[-2], "tar",my_sim.mj_data.body_xpos[-1])
+        # print("tip pos",my_sim.mj_data.get_body_xpos('body_whip_node13'),"tar pos",my_sim.mj_data.get_body_xpos('body_target'))
         sum_reward+=r
 
-        if done:
-           
-            my_sim.reset()
+        if done:          
+            my_sim.reset()   
+            #break    
         else:
             my_sim.reset()
             
@@ -88,12 +93,13 @@ if __name__=="__main__":
         epoch+=1
         print("sum:",sum_reward)
         # in order to save the k, b data
-        np.save(f"tmp_k_{args.is_oiac}",my_sim.tmp_K)
-        np.save(f"tmp_b_{args.is_oiac}",my_sim.tmp_B)
-        np.save(f"tmp_v_{args.is_oiac}",my_sim.tmp_verr)
-        np.save(f"tmp_p_{args.is_oiac}",my_sim.tmp_perr)
+        # np.save(f"tmp_k_{args.is_oiac}",my_sim.tmp_K)
+        # np.save(f"tmp_b_{args.is_oiac}",my_sim.tmp_B)
+        # np.save(f"tmp_v_{args.is_oiac}",my_sim.tmp_verr)
+        # np.save(f"tmp_p_{args.is_oiac}",my_sim.tmp_perr)
 
+        np.save(f"s_tau_{args.is_oiac}",my_sim.s_tau)
+        np.save(f"e_tau_{args.is_oiac}",my_sim.e_tau)
         #print("K",my_sim.tmp_K, "B",my_sim.tmp_B)
         #np.savetxt(fname='data.csv', X=my_sim.tmp_K, delimiter=",")
        
-    my_sim.close()
