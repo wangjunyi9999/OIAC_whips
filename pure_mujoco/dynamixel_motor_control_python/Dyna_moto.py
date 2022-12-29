@@ -280,9 +280,9 @@ class Dyna_moto():
 				self.now_tor[i] = self.cur2tor(self.now_cur[i])
 			if (self.only_sense):
 				print("The sensed positions are ", self.now_pos)
-				#print("The sensed velocities are ", self.now_vel)
-				#print("The sensed currents are ", self.now_cur)
-				#print("The sensed torques are ", self.now_tor)
+				# print("The sensed velocities are ", self.now_vel)
+				# print("The sensed currents are ", self.now_cur)
+				# print("The sensed torques are ", self.now_tor)
 		else:
 			self.get_pos()
 			self.get_vel()
@@ -358,7 +358,7 @@ class Dyna_moto():
 				self.paras[i, j] = self.read(self.moto_ids[j], self.ad_read[i], self.bynum_read[i])
 				#print(self.paras[i, j])
 		for i in range(self.moto_num):
-			self.con_mode[i] = self.paras[0,i]
+			self.con_mode[i] = 0#self.paras[0,i]
 			self.MinCur[i] = -self.paras[1,i]
 			self.MaxCur[i] = self.paras[1,i]
 			self.MaxPos[i] = self.paras[2,i]
@@ -366,6 +366,7 @@ class Dyna_moto():
 			self.pos2rad[i] = 2*pi/(self.MaxPos[i] - self.MinPos[i])
 			self.MaxVel[i] = self.paras[4,i]
 			self.MinVel[i] = -self.paras[4,i]
+			
 			print("The motor# %d is in the %s mode." % (self.moto_ids[i], Con_Mode[self.con_mode[i]]))
 			print("The maximum and minimum positions are: %f and %f" %(self.MaxPos[i], self.MinPos[i]))
 			print("The maximum and minimum currents are: %f and %f" %(self.MaxCur[i], self.MinCur[i]))
@@ -405,7 +406,7 @@ class Dyna_moto():
 			else:
 				self.con_cur_n[i] = self.con_cur[i] * UNITCUR#20190611
 				self.syn_write(gsw, self.moto_ids[i], byte_num, self.con_cur[i])
-
+				
 		# Syncwrite goal position
 		dxl_comm_result = gsw.txPacket()
 		if dxl_comm_result != COMM_SUCCESS:

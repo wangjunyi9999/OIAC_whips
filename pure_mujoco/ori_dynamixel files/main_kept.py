@@ -55,7 +55,7 @@ from os.path import *
 import itertools
 
 import numpy.random as npr
-
+from numpy import *
 DXL_MOVING_STATUS_THRESHOLD = 20 
 import os
 if os.name == 'nt':

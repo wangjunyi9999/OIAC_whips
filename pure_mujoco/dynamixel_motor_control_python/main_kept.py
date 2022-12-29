@@ -101,15 +101,15 @@ CHECK_ID = 0
 CHECK_CUR_NUM = 6
 BAUDRATE = 3000000
 
-CONTROLLER = 'ada_imp'#'const_imp'#
-TASK = 'track'#'post_con'#
+CONTROLLER = 'ada_imp'#'ada_imp'#'const_imp'#
+TASK = 'track'#'track'#'post_con'#
 
 class Ada_con():
-	def __init__(self, con_type = 'impe_con', co_mod = 3, re_only = False, dn = '/dev/ttyUSB0'):
+	def __init__(self, con_type = 'impe_con', co_mod = 3, re_only = False, controller='ada_imp', dn = '/dev/ttyUSB0'):
 		self.dm = Dm.Dyna_moto(baudrate = BAUDRATE, devicename = dn, con_mode = co_mod, ro = re_only)
 
 		self.num_moto = self.dm.moto_num
-
+		#self.co_mod=co_mod
 		#Position angle and velocity feedback obtained from the motor
 		self.pos_rad = zeros(self.num_moto)
 		self.vel_rad = zeros(self.num_moto)
@@ -139,7 +139,7 @@ class Ada_con():
 		self.cur4tor = zeros(self.num_moto)
 		self.pre_pos_des = zeros(self.num_moto)
 		
-		self.task = CONTROLLER #'const_imp'#'ada_imp'#
+		self.task = controller #'const_imp'#'ada_imp'#
 		self.tra_type = TASK #'track'#'post_con'#
 
 		self.max_noi = pi/10.0
@@ -217,8 +217,31 @@ class Ada_con():
 				self.save_data()
 		self.stop_motors()
 
-	def start_onetime(self,a):
+	def pre_onetime(self,a):
+		# it is used for waiting the motor move to desired initial pos
+		self.start_timer()
+		#while(abs(self.pos_rad[CHECK_ID])< self.safe_rad and (self.n_t <= self.go_t+self.stop_t)):
+		while((self.n_t <= self.go_t+self.stop_t)):	
+			
+			self.n_t = self.now_timer()
+			#self.dt = self.n_t - self.pre_t
+			#Get position and velocity feedbacks from the motor
+			self.get_states()
+			# if self.co_mod==0:
+			self.one_trial(a)
+			# else:
+			# 	self.pos_trial(a)
 
+			self.controllers()
+
+			#Send commands to the motor
+			self.SendMotoComm()
+			
+			self.CalFbAve()
+
+
+	def start_onetime(self,a):
+		# it is used for the whole action
 		self.start_timer()
 		#while(abs(self.pos_rad[CHECK_ID])< self.safe_rad and (self.n_t <= self.go_t+self.stop_t)):
 		while((self.n_t <= self.go_t+self.stop_t)):	
@@ -239,10 +262,20 @@ class Ada_con():
 
 		self.stop_motors()
 
+	# def pos_trial(self,a):
+
+	# 	vel_0=(a[2]-a[0])/self.go_t
+	# 	vel_1=(a[3]-a[1])/self.go_t
+		
+	# 	self.dm.con_pos[0]=a[0]
+	# 	self.dm.con_pos[1]=a[1]
+		
+		# self.pos_des[i], self.pos_des[i+1]=self.min_jerk(a,t)[0]
+		# self.vel_des[i], self.vel_des[i+1]=self.min_jerk(a,t)[1]
+
 	def one_trial(self,a):
 		"""
 		this method is added by junyi to generate single trial with min-jerk
-
 		"""
 		i=0
 		t=self.n_t
@@ -344,6 +377,7 @@ class Ada_con():
 			'''
 			#T3
 			self.pos_rad[i] = (self.dm.now_pos[i] - self.dm.init_var[i])*self.dm.pos2rad[i]
+			
 			self.pos_diff[i] = self.pos_rad[i] - self.pos_des[i]
 			
 
@@ -409,9 +443,9 @@ class Ada_con():
 			#T8
 			self.k[i] = self.cons_k
 			self.d[i] = self.cons_d
-			self.ff[i] = 0.00
+			self.ff = [-0.001,0.00]
 			print("The mechanical impedance parameters are: %f and %f" % (self.k[i], self.d[i]))
-			self.tau[i] = -(self.cons_k*self.pos_diff[i] + self.cons_d*self.vel_diff[i])-self.ff[i]
+			self.tau[i] = -1*(self.cons_k*self.pos_diff[i] + self.cons_d*self.vel_diff[i])-self.ff[i]
 
 			self.Tor2RealCur(i)
 			print("At %f, torque, current, and position are: %f and %f, %f" % (self.n_t, self.tau[i], self.dm.con_cur[i], self.pos_rad[i]))
@@ -608,11 +642,32 @@ class Ada_con():
 
 
 if __name__ == '__main__':
-	ac = Ada_con(co_mod = 0, re_only = True)
+	ac = Ada_con(co_mod = 0, re_only = True, controller='ada_imp')# 0(current control), 3(position control)
+	bd = Ada_con(co_mod = 0, re_only = True)
 	# commenting the above line, using the follwing line if your USBToSerial port ID is not default (i.e., ttyUSB0)
-	# ac = Ada_con(co_mod = 0, re_only = True, dn = '/dev/ttyUSB1') # In this case, USBToSerial port ID is ttyUSB1.
-	#ac.start()
-	ac.go_t=1.1
-	ac.stop_t=0
-	ac.start_onetime(a=[-pi*0.4,pi*0.55,pi*0.5,-pi*0.65])
-	ac.close()
+	#ac = Ada_con(co_mod = 0, re_only = True, dn = '/dev/ttyUSB1') # In this case, USBToSerial port ID is ttyUSB1.
+	# ac.start()
+	# ac.close()
+	"""
+	below is formal code
+	"""
+	ac.go_t=2#5#ini_t to reach desired ini pos
+	ac.stop_t=12
+	a=[-0.75*pi,0.37*pi,0.65*pi,-0.25*pi, 1.28]
+	
+	# #a=[-2.3, 0.2 , 2.8 , 2.6,1.2 ]
+	a_ini=[0,0,a[0],a[1]]
+	ac.pre_onetime(a_ini)
+	#ac.close()
+	# # a=[ini_1, -ini_2, fin_1, -fin_2] because motor 4 is inversed set.
+	
+	"""
+	!!!!!!
+	"""
+	bd.go_t= a[-1]#1.03636364 mass 0.005
+	bd.stop_t=0
+	bd.start_onetime(a[:4])
+
+	# # #ac.start_onetime(a=[-0.99166435, 2.24512808 , 2.08646179 , -1.10273075 ])#mass 0.01 D=0.047
+ 	# # #ac.start_onetime(a=[-0.99166435, 1.67392942,  0.95993109 ,- 0.81713142  ])#mass 0.005 D=0.35
+	bd.close()

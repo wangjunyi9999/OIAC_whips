@@ -44,7 +44,7 @@ class Simulation:
         # The current time, time-step (step_t), start time of the controller (ts) and total runtime (T) of the simulation
         self.t   = 0
         self.step_t  = self.mj_model.opt.timestep                                                  
-        self.stop_t= 0.4
+        self.stop_t= 0.15
 
         limb_names = [ "_".join( name.split( "_" )[ 1 : ] ) for name in self.mj_model.body_names if "body" and "arm" in name ]
         self.M  = { name: get_model_prop( self.mj_model, "body", name, "mass"    ) for name in limb_names }
@@ -54,19 +54,19 @@ class Simulation:
         #           Hence, we save/render the video every round( 10000 / 30 ) time steps.  round is in order to output 333
         self.vid_step   = round( ( 1. / self.step_t ) / ( self.fps / self.args.vid_speed )  )
 
-        # Step for printing the data. 
-        self.print_step = round( ( 1. / self.step_t ) / self.args.print_freq  )  
+        # # Step for printing the data. 
+        # self.print_step = round( ( 1. / self.step_t ) / self.args.print_freq  )  
 
-        # Step for Saving the data. 
-        self.save_step  = round( ( 1. / self.step_t ) / self.args.save_freq  )   
+        # # Step for Saving the data. 
+        # self.save_step  = round( ( 1. / self.step_t ) / self.args.save_freq  )   
 
         # action low and high boundary
-        self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, 0.25*np.pi, 0.3])
-        self.action_space_high=np.array([-0.25*np.pi, -0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
+        # self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, 0.25*np.pi, 0.3])
+        # self.action_space_high=np.array([-0.25*np.pi, -0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
 
         # change boundary V1
-        # self.action_space_low=np.array([-0.75*np.pi,  -0.75*np.pi, 0.25*np.pi, -0.25*np.pi, 0.3])
-        # self.action_space_high=np.array([-0.25*np.pi, 0.25*np.pi, 0.75*np.pi, 0.75*np.pi ,1.2])
+        self.action_space_low=np.array( [ -0.5 * np.pi,  0, 0, 0.25 * np.pi, 0.4 ] ) 
+        self.action_space_high=np.array( [ -0.1 * np.pi, 0.25 * np.pi,  0.5 * np.pi, 0.9 * np.pi, 1.5 ] )
         
         # #change boundary V2 mose version
         # self.action_space_low=np.array( [ -0.5 * np.pi,    0.0, -0.5 * np.pi, 0.0, 0.4 ] ) 
@@ -112,7 +112,7 @@ class Simulation:
     def gen_action(self):
         # replace true means the same data can be selected
         action= np.empty(shape=self.a_dim, dtype=float)
-        
+        #np.random.seed(0)
         
         action[0]=np.random.choice(self.q1_start_valueset,1, replace= True)
         action[1]=np.random.choice(self.q2_start_valueset,1,replace= True)
@@ -179,7 +179,7 @@ class Simulation:
 
         self.init_qpos = qpos
         self.init_qvel = qvel
-        self.mj_data.xfrc_applied[29,2]= self.mj_model.body_mass[29]* la.norm(self.mj_model.opt.gravity)
+        self.mj_data.xfrc_applied[-1,2]= self.mj_model.body_mass[-1]* la.norm(self.mj_model.opt.gravity)
 
         self.mj_data.qpos[ : 2] = qpos[ : nq ]
         self.mj_data.qvel[ : 2] = qvel[ : nq ]
@@ -190,13 +190,17 @@ class Simulation:
 
     def dist2tip(self):
         """get distance between tip and target"""
+        # print("tip",self.mj_data.body_xpos[-2], "tar",self.mj_data.body_xpos[-1])
         dists =  la.norm(self.mj_data.body_xpos[-2]-self.mj_data.body_xpos[-1])
+        #print(dists)
         return dists
 
-    def forward( self ):
+    def forward( self):
         """
             Forward the simulation, A simple wrapper to call the simulation
         """
+        
+        #self.make_whip_downwards
         self.mj_sim.forward( )
 
     def reset( self ):
@@ -206,6 +210,16 @@ class Simulation:
 
         self.mj_sim.reset( )
     
+    def make_whip_downwards( self ):
+
+
+        _, pitch, roll = quat2euler( self.mj_data.get_body_xquat(  "CB0" ) )
+  
+        self.mj_data.qpos[ self.n_act ] = + pitch if round( roll ) == 0 else np.pi - pitch
+        
+ 
+        self.mj_sim.forward( )
+
     def diamond_target_move(self, done):
         """
             define a rhombus shape, consisting by 25 points 
@@ -241,23 +255,24 @@ class Simulation:
         self.set_state(qpos, qvel)
 
     def fixed_target(self):
-
+        # fixed target position
         qpos=self.mj_data.qpos.ravel().copy()
         qvel = self.mj_data.qvel.ravel().copy()
-        qpos[-2:]=[0.6,0]
+        qpos[-2:]=[0,0]
         self.step_qpos=qpos
         self.step_qvel=qvel
         self.set_state(qpos, qvel)
     
     def ini_target(self):
-
+        # moving target position within a half circle zone
+        radius=0.1
         qpos=self.mj_data.qpos.ravel().copy()
         qvel = self.mj_data.qvel.ravel().copy()
         goal=qpos[-2:]
         while True:
-            goal_x = random.uniform(0, 0.55)
-            goal_y = random.uniform(-0.55, 0.55)
-            if math.sqrt(goal_x**2+goal_y**2) < 0.55:
+            goal_x = random.uniform(0, radius)
+            goal_y = random.uniform(-radius, radius)
+            if math.sqrt(goal_x**2+goal_y**2) <= radius:
                 qpos[-2:] =[goal_x,goal_y]    
                 qpos[-2:]=goal                
                 break
@@ -305,12 +320,6 @@ class Simulation:
         self.mj_data.qvel[:] = np.copy(qvel)
         self.mj_sim.forward( )
         
-    def close( self ):
-        """ 
-            Wrapping up the simulation
-        """
-        pass
-
     def set_camera_pos( self ):
         """
             Set the camera posture of the simulation. 
@@ -329,12 +338,14 @@ class Simulation:
         dist_mov=[]
         min_dist1=[1e5]
         min_dist2=[1e5]
-
-        # test K, B, pos_err, vel_err
+        
+        # test K, B, pos_err, vel_err, tau sum
         self.tmp_K=[]
         self.tmp_B=[]
         self.tmp_verr=[]
         self.tmp_perr=[]
+        self.s_tau=[]
+        self.e_tau=[]
 
         # The main loop of the simulation 
         while self.t <= action[4]+self.stop_t:
@@ -343,10 +354,12 @@ class Simulation:
                 self.mj_viewer.render( )
   
             """ # use oiac or constant""" 
+            before_q=np.copy( self.mj_data.qpos[ : self.n_act ] )
             tau= self.get_tau(action, self.t, is_oiac=self.is_oiac)
             
             self.mj_data.ctrl[ :self.n_act ] = list(np.array(tau).flatten())[:2]
             
+
             dist_mov.append(self.dist2tip())
             min_dist1=min(dist_mov)
 
@@ -355,6 +368,8 @@ class Simulation:
             self.tmp_B.append(self.Bq)
             self.tmp_perr.append(self.q_err)
             self.tmp_verr.append(self.v_err)
+            
+            # print("tau:",tau)
             # Update the step
             self.mj_sim.step( )
 
@@ -366,25 +381,28 @@ class Simulation:
                 break
 
             self.t = self.mj_data.time  
-
+            d_theta=self.mj_data.qpos[ : self.n_act ]-before_q
+            self.s_tau.append(abs(list(np.array(tau).flatten())[0]*d_theta[0]))
+            self.e_tau.append(abs(list(np.array(tau).flatten())[1]*d_theta[1]))
+            
         self.dist= min(min_dist1, min_dist2)
         reward, done= self.set_reward()
-
+        
         return self.dist, reward, done
     
     def set_reward(self):
 
-        self.hit_value=0.1
-        self.no_hit=0.5
+        self.hit_value=0.03#0.01#0.05
+        self.no_hit=0.1#0.1
         done=False
 
         if self.dist<=self.hit_value:
-            reward=50
+            reward=50#50
             done=True
         elif self.hit_value<self.dist<= self.no_hit:
-            reward= -1* self.dist
+            reward= -5* self.dist
         else:
-            reward= -5 * self.dist
+            reward= -10 * self.dist
 
         return reward, done
 
@@ -396,6 +414,7 @@ class Simulation:
         # Get the current angular position and velocity of the robot arm only
         self.q  = np.copy( self.mj_data.qpos[ : self.n_act ] )
         self.dq = np.copy( self.mj_data.qvel[ : self.n_act ] )
+
  
         self.q0  = np.zeros( self.n_act )
         self.dq0 = np.zeros( self.n_act )
@@ -419,6 +438,7 @@ class Simulation:
 
             self.Kq= track_err*self.q_err.T/adapt_scale
             self.Bq= track_err*self.v_err.T/adapt_scale
+            
 
 
         else:

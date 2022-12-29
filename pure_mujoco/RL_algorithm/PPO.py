@@ -95,6 +95,7 @@ class ContinuousActor(nn.Module):
 			noise = torch.randn_like(mu)  # sampled from guassian distribution
 			pi = mu + noise * std
 			logp_pi = gaussian_logprob(noise, self.log_std).sum(axis=-1)
+			
 		else:
 			pi = mu
 			logp_pi = None
@@ -128,7 +129,7 @@ class PPO(nn.Module):
 		is_discrete: bool = False,
 		clip_ratio: float = 0.2,
 		ent_coef: float = 0.0,
-		target_kl: float = 0.01,
+		target_kl: float = 0.05,#0.01
 	):
 		super(PPO, self).__init__()
 
@@ -159,6 +160,7 @@ class PPO(nn.Module):
 		v = self.critic(state)
 		if not self.is_discrete:
 			scaled_action = self.max_action * torch.tanh(action)
+			#print(f'action:{action},selected{scaled_action}, np data{scaled_action.data.cpu().numpy().flatten()}')
 			if not deterministic:
 				return scaled_action.data.cpu().numpy().flatten(), action.data.cpu().numpy().flatten(), logp_pi.data.cpu().numpy(), v.data.cpu().numpy()
 			else:

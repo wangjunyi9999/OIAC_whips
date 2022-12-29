@@ -1,6 +1,5 @@
 """ 
 remeber to change the file saving format
-this main file without any ML methods, just a pure mujoco env for random target
 """
 import numpy as np
 import argparse
@@ -14,7 +13,7 @@ def my_parser( ):
     parser = argparse.ArgumentParser( description = 'Parsing the arguments for running the simulation' )
     #parser.add_argument( '--version'     , action = 'version'     , version = Constants.VERSION )
     parser.add_argument( '--start_time'  , action = 'store'       , type = float ,  default = 0.0,                   help = 'Start time of the controller'                                                      )
-    parser.add_argument( '--model_name'  , action = 'store'       , type = str   ,  default = '2D_model_w_whip_noml' ,    help = 'Model name for the simulation'                                                     )
+    parser.add_argument( '--model_name'  , action = 'store'       , type = str   ,  default = '2D_model_w_whip_drl_nlopt' ,    help = 'Model name for the simulation'                                                     )
     parser.add_argument( '--ctrl_name'   , action = 'store'       , type = str   ,  default = 'joint_imp_ctrl',      help = 'Model name for the simulation'                                                     )
     parser.add_argument( '--cam_pos'     , action = 'store'       , type = str   ,                                   help = 'Get the whole list of the camera position'                                         )
     parser.add_argument( '--mov_pars'    , action = 'store'       , type = str   ,                                   help = 'Get the whole list of the movement parameters'                                     )
@@ -32,7 +31,7 @@ def my_parser( ):
     parser.add_argument( '--save_data'   , action = 'store_true'  , dest = "is_save_data"   ,   default=False,       help = 'Save the details of the simulation'                            )
     parser.add_argument( '--vid_off'     , action = 'store_true'  , dest = "is_vid_off"     ,   default=False,       help = 'Turn off the video'                                            )
     parser.add_argument( '--run_opt'     , action = 'store_true'  , dest = "is_run_opt"     ,                        help = 'Run optimization of the simulation'                            )
-    parser.add_argument("--is_oiac", default=True, type=bool, help="OIAC or constant control")
+    parser.add_argument("--is_oiac", default=False, type=bool, help="OIAC or constant control")
     parser.add_argument("--opt_name", default='GA')
     return parser
 
@@ -55,8 +54,8 @@ class GA:
         
         # import simulation class
         parser = my_parser()
-        args, unknown = parser.parse_known_args()
-        self.my_sim=Simulation(args)
+        self.args, unknown = parser.parse_known_args()
+        self.my_sim=Simulation(self.args)
         self.my_sim.set_camera_pos()
         self.low=self.my_sim.action_space_low
         self.up=self.my_sim.action_space_high
@@ -184,19 +183,20 @@ class GA:
     
             if best_ind['fitness'] >self.bestindividual['fitness']:
                 self.bestindividual = best_ind
-            self.best.append((1-(self.bestindividual['fitness']))*self.maxdist)# transfer the normal distance
+            #self.best.append((1-(self.bestindividual['fitness']))*self.maxdist)# transfer the normal distance
             print("Best individual found is {}, its fitness is {:.3f}".format(self.bestindividual['Gene'].data,
                                                         self.bestindividual['fitness']))
             print("  Max fitness of current pop: {}".format(max(fits)))
-
-            if self.bestindividual['fitness']>=0.9:
+            self.best.append((1-(max(fits)))*self.maxdist)# current best transfer the normal distance
+            np.save(f'./GA_res/GA_{self.args.is_oiac}_result.npy',self.best)
+            if self.bestindividual['fitness']>=0.994:# 0.994=(5-0.03)/5 0.03 is threshold
                 break
         print("------ End of (successful) evolution ------")
-        np.save('GA_result.npy',self.best)
+        #np.save(f'GA_result.npy',self.best)
 
 if __name__=="__main__":
 
-    CXPB, MUTPB, NGEN, popsize = 0.8, 0.1, 500, 20 # popsize must be even number
+    CXPB, MUTPB, NGEN, popsize = 0.85, 0.1, 1000, 10 # popsize must be even number
     parameter=[CXPB, MUTPB, NGEN, popsize]
     run= GA(parameter)
     run.GA_main()

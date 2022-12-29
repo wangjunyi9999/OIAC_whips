@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 def main():
-    cap=cv2.VideoCapture('test_black.mp4')
+    cap=cv2.VideoCapture('opencv.mp4')
     back_sub = cv2.createBackgroundSubtractorMOG2(history=100, 
         varThreshold=25, detectShadows=True)
 

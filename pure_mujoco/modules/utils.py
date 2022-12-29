@@ -285,17 +285,24 @@ def make_whip_downwards( sim ):
     assert "body_whip_node1" in sim.mj_model.body_names
 
     _, pitch, roll = quat2euler( sim.mj_data.get_body_xquat(  "body_whip_node1" ) )
-
+    #print("pitch",pitch,"roll",roll)
+    
     n_act = len( sim.mj_model.actuator_names )
-
+    #print("qpos2",sim.mj_data.qpos[ n_act-1 ])
     # For a 2DOF robot
+    # pos1=2.19752819
+    # pos2=1.4121300264102075
+    # sim.mj_data.qpos[ n_act ]=-pos1
     if   n_act == 2:
-        sim.mj_data.qpos[ n_act ] = + pitch if round( roll ) == 0 else np.pi - pitch
-
+        if round( roll ) == 0:
+            sim.mj_data.qpos[ n_act ] = + pitch 
+        else: 
+            sim.mj_data.qpos[ n_act ]= np.pi - (pitch)
+    #print("qpos2",sim.mj_data.qpos[ n_act ])
     # For a 4DOF robot
-    elif n_act == 4: 
-        sim.mj_data.qpos[ n_act     ] = - roll  
-        sim.mj_data.qpos[ n_act + 1 ] = + pitch 
+    # elif n_act == 4: 
+    #     sim.mj_data.qpos[ n_act     ] = - roll  
+    #     sim.mj_data.qpos[ n_act + 1 ] = + pitch 
 
     sim.mj_sim.forward( )
 

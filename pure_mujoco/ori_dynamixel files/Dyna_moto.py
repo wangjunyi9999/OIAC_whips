@@ -26,7 +26,7 @@ doi: 10.1109/ROBIO.2018.8665222
 from Dynamixel_sdk.port_handler import *
 
 from Dynamixel_sdk.packet_handler import *
-
+from numpy import *
 
 import os
 from scipy import *

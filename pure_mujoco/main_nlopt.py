@@ -14,7 +14,7 @@ def my_parser( ):
     parser = argparse.ArgumentParser( description = 'Parsing the arguments for running the simulation' )
     #parser.add_argument( '--version'     , action = 'version'     , version = Constants.VERSION )
     parser.add_argument( '--start_time'  , action = 'store'       , type = float ,  default = 0.0,                   help = 'Start time of the controller'                                                      )
-    parser.add_argument( '--model_name'  , action = 'store'       , type = str   ,  default = '2D_model_w_whip' ,    help = 'Model name for the simulation'                                                     )
+    parser.add_argument( '--model_name'  , action = 'store'       , type = str   ,  default = '2D_model_w_whip_drl_nlopt' ,    help = 'Model name for the simulation'                                                     )
     parser.add_argument( '--ctrl_name'   , action = 'store'       , type = str   ,  default = 'joint_imp_ctrl',      help = 'Model name for the simulation'                                                     )
     parser.add_argument( '--cam_pos'     , action = 'store'       , type = str   ,                                   help = 'Get the whole list of the camera position'                                         )
     parser.add_argument( '--mov_pars'    , action = 'store'       , type = str   ,                                   help = 'Get the whole list of the movement parameters'                                     )
@@ -70,7 +70,18 @@ if __name__=="__main__":
     nl_init=(lb+ub)*0.5
     n_opt=5
     target_pos=my_sim.mj_data.body_xpos[-1]
-
+    """
+0,[x,y],[1.5344421851525047,0.051590880588060495]
+1,[x,y],[1.4920571580830844,-0.048216649941407334]
+2,[x,y],[1.5011274721368608,-0.019013172509917145]
+3,[x,y],[1.5283798589034772,-0.039337454784214514]
+4,[x,y],[1.4976596954152355,0.016676407891006245]
+5,[x,y],[1.5408112885195335,0.0009373711634780568]
+6,[x,y],[1.4781837844399703,0.05116084083144479]
+7,[x,y],[1.511836899667533,-0.04989873172751189]
+8,[x,y],[1.4810147569319332,0.04596634965202573]
+9,[x,y],[1.5398838287967993,0.036796786383088254]
+    """
     opt=nlopt.opt(nlopt.GN_DIRECT_L, n_opt)
     iter=0
 
@@ -82,7 +93,7 @@ if __name__=="__main__":
         
         make_whip_downwards( my_sim )
         
-        my_sim.forward( )
+        my_sim.fixed_target( )
         
         s,r,done=my_sim.run(mov_arrs)
 
@@ -98,10 +109,10 @@ if __name__=="__main__":
     opt.set_maxeval( 600 )
 
     opt.set_min_objective( nlopt_obj )
-    opt.set_stopval( 0.1 ) 
+    opt.set_stopval( 0.03 ) 
 
     xopt = opt.optimize( nl_init )
-    np.save(f"./classic_control_res/{file_name}_{args.is_oiac}",opt_val_arr)
+    np.save(f"./classic_control_res/{file_name}_{args.is_oiac}_{target_pos}+0",opt_val_arr)
     print( "Optimal Values",xopt[ : ], "Result", opt.last_optimum_value( ) )
 
        
