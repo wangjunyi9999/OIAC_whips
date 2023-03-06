@@ -104,7 +104,7 @@
          </body>
       </body>
       <!geom name="geom_target" type="sphere" pos=" 2.3950  0.0000  0.0000" material="LimbColor" mass="0" size="0.03" />
-      <body name="body_target" pos="1.45 0 0" euler="0 0 0">
+      <body name="body_target" pos="1.38 0 -0.23" euler="0 0 0">
             
         <joint armature="0" axis="1 0 0" damping="0" limited="true" name="target_x" pos="0 0 0" range="-0.6 0.6" ref="0" stiffness="0" type="slide" />
         <!joint armature="0" axis="0 1 0" damping="0" limited="true" name="target_y" pos="0 0 0"  range="-0.1 0.1" ref="0" stiffness="0" type="slide" />

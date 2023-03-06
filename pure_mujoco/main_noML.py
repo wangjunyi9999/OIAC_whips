@@ -58,16 +58,34 @@ if __name__=="__main__":
 
     target_pos=my_sim.mj_data.body_xpos[-1]
     sum_reward=0
-    for epoch in range(1):
+    for epoch in range(100):
         
         n = my_sim.n_act
 
         #mov_arrs=my_sim.gen_action()
         # this is for the true mov_arrs tau theta
-        mov_arrs=[-1.467776894569396973e+00,2.128601372241973877e-01,1.246050119400024414e+00,8.783212900161743164e-01,1.402317047119140625e+00]
+        #mov_arrs=[-1.467776894569396973e+00,2.128601372241973877e-01,1.246050119400024414e+00,8.783212900161743164e-01,1.402317047119140625e+00]
+        #mov_arrs=[-1.269634842872619629e+00,2.125513255596160889e-01,1.310987710952758789e+00,8.012050390243530273e-01,1.497980833053588867e+00]
+        #mov_arrs=[-1.070087194442749023e+00,2.120117843151092529e-01,1.350341677665710449e+00,8.268161416053771973e-01,1.359814882278442383e+00]
+        #mov_arrs=[-1.061419010162353516e+00,4.247490465641021729e-01,1.398698449134826660e+00,8.047601580619812012e-01,1.421873927116394043e+00]
+        """
+        point 1: mov_arrs=[-1.56, 0.1, 1.2, 0.5, 0.9] 1.45 -0.2
+        1.1 [-0.8, 0.3, 0.2, 0.5, 0.9]
+        1.2 [-1.2, 0.5, 0.2, 0.4, 0.9]
+        point 2: mov_arrs=[-1.15, 0.4, 0.8, 1.2, 0.8] 1.41 -0.28
+        2.1 [-0.2, 0.1, 0.1, 1.4, 0.9]
+        2.2 [-1.2, 0.2, 0.55, 0.45, 0.9]
+        point 3: mov_arrs=[-1.5, 0.2, 0.9, 0.6, 0.8] 1.38  -0.23
+        3.1 [-0.2, 0.1, 0.2, 0.15, 0.9]
+        3.2 
+        """
+        mov_arrs=[-1.1, 0.4, 0.5, 0.5, 0.9]
         # this is for the false mov_arrs tau theta
         #mov_arrs=[-1.431458353996276855e+00,6.976974755525588989e-02,1.412713766098022461e+00,1.069405674934387207e+00,1.393481254577636719e+00]
-    
+        #mov_arrs=[-1.535205006599426270e+00,7.643579840660095215e-01,1.542991757392883301e+00,8.183321952819824219e-01,1.482742547988891602e+00]
+        #mov_arrs=[-1.496259093284606934e+00,6.515965461730957031e-01,1.370425462722778320e+00,7.926166057586669922e-01,1.477384448051452637e+00]
+        #mov_arrs=[-1.199241518974304199e+00,1.300157755613327026e-01,1.452973842620849609e+00,1.088389515876770020e+00,1.409797430038452148e+00]
+        #mov_arrs=[-8.207507133483886719e-01,6.427380442619323730e-01,1.394251465797424316e+00,8.961998224258422852e-01,1.308517456054687500e+00]
         init_cond = { "qpos": mov_arrs[ :n ] ,  "qvel": np.zeros( n ) }
 
         my_sim.init( qpos = init_cond[ "qpos" ], qvel = init_cond[ "qvel" ] )
@@ -89,7 +107,6 @@ if __name__=="__main__":
         else:
             my_sim.reset()
             
-        
         epoch+=1
         print("sum:",sum_reward)
         # in order to save the k, b data
@@ -97,9 +114,14 @@ if __name__=="__main__":
         # np.save(f"tmp_b_{args.is_oiac}",my_sim.tmp_B)
         # np.save(f"tmp_v_{args.is_oiac}",my_sim.tmp_verr)
         # np.save(f"tmp_p_{args.is_oiac}",my_sim.tmp_perr)
+        """
+        for energy consumption calculation
+        """
+        # np.save(f"./energy_consumption/s_tau_{args.is_oiac}_0.08",my_sim.s_tau)
+        # np.save(f"./energy_consumption/e_tau_{args.is_oiac}_0.08",my_sim.e_tau)
 
-        np.save(f"s_tau_{args.is_oiac}",my_sim.s_tau)
-        np.save(f"e_tau_{args.is_oiac}",my_sim.e_tau)
+
+
         #print("K",my_sim.tmp_K, "B",my_sim.tmp_B)
         #np.savetxt(fname='data.csv', X=my_sim.tmp_K, delimiter=",")
        

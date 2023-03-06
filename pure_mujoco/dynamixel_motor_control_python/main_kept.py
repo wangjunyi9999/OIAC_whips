@@ -652,10 +652,17 @@ if __name__ == '__main__':
 	below is formal code
 	"""
 	ac.go_t=2#5#ini_t to reach desired ini pos
-	ac.stop_t=12
-	a=[-0.75*pi,0.37*pi,0.65*pi,-0.25*pi, 1.28]
-	
-	# #a=[-2.3, 0.2 , 2.8 , 2.6,1.2 ]
+	ac.stop_t=8#12
+	#a=[-0.75*pi,0.37*pi,0.65*pi,-0.25*pi, 1.28]#real1
+	#a=[-0.55*pi,0.1*pi,0.35*pi,-0.25*pi, 1]#real11
+	#a=[-0.65*pi,0.15*pi,0.85*pi,-0.25*pi, 1]#real12
+	#a=[-0.75*pi,0.15*pi,0.25*pi,-0.45*pi,0.9]#real2
+	#a=[-0.35*pi,0.05*pi,0.25*pi,-0.5*pi,0.9]#real21
+	#a=[-0.75*pi,0.3*pi,0.1*pi,-0.2*pi,0.9]#real22
+	#a=[-0.75*pi,0.25*pi,0.2*pi,-0.35*pi,0.95]#real3
+	#a=[-0.75*pi,0.1*pi,0.1*pi,-0.35*pi,0.95]#real31
+	a=[-0.35*pi,0.1*pi,0.15*pi,-0.1*pi,0.95]#real32
+
 	a_ini=[0,0,a[0],a[1]]
 	ac.pre_onetime(a_ini)
 	#ac.close()
@@ -665,7 +672,7 @@ if __name__ == '__main__':
 	!!!!!!
 	"""
 	bd.go_t= a[-1]#1.03636364 mass 0.005
-	bd.stop_t=0
+	bd.stop_t=0.2
 	bd.start_onetime(a[:4])
 
 	# # #ac.start_onetime(a=[-0.99166435, 2.24512808 , 2.08646179 , -1.10273075 ])#mass 0.01 D=0.047

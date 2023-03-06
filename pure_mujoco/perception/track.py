@@ -5,7 +5,7 @@ from scipy.spatial import distance as dist
 from datetime import *
 
 t=datetime.now().timestamp()
-
+label='real_32'
 def midpoint(box):
     x=(min(box[:,0][:])+max(box[:,0][:]))/2
     y=(min(box[:,1][:])+max(box[:,1][:]))/2
@@ -36,10 +36,12 @@ red_low=(0,79,73)
 red_high=(10,220,155)
 # recording or not
 write=False
-
+#store the distance and tip pos
 D_SET=[]
+xpos=[]
+ypos=[]
 if write:
-    writer=cv2.VideoWriter("opencv_{:.2f}.mp4".format(t),cv2.VideoWriter_fourcc(*'DIVX'),30,(width,height))
+    writer=cv2.VideoWriter(label+"_opencv_{:.2f}.mp4".format(t),cv2.VideoWriter_fourcc(*'DIVX'),30,(width,height))
 # make sure auto exposure priority is 0 to keep fps is 60 but it seems 30 fps, maybe bug in pyrealsense   
 for sensor in sensors:
     if sensor.supports(rs.option.auto_exposure_priority):
@@ -52,7 +54,6 @@ for sensor in sensors:
        print ("New AUTO_EXPOSURE_PRIORITY = %d" % exp)
        break
 try:
-    
     while True:
 
         # Wait for a coherent pair of frames: depth and color
@@ -122,6 +123,8 @@ try:
         if key & 0xFF==27:
             break
         D_SET.append(D)
+        xpos.append(rope_center[0])
+        ypos.append(rope_center[1])
 
         
       
@@ -131,6 +134,7 @@ finally:
     pipeline.stop()
     # recording
     if write:
-        np.save("tip2target_{:.2f}".format(t),D_SET)
+        np.save(label+"_tip2target_{:.2f}".format(t),D_SET)
+        #np.savetxt(label+'_pos.txt',(xpos,ypos))
         writer.release()
     cv2.destroyAllWindows()
