@@ -1,0 +1,11 @@
+cvxpy==1.2.1
+cvxpylayers==0.1.5
+matplotlib==3.5.1
+mujoco_py==2.1.2.14
+nlopt==2.7.1
+numpy==1.22.3
+opencv_contrib_python==4.6.0.66
+pyrealsense2==2.51.1.4348
+pyserial==3.5
+scipy==1.9.0
+torch==1.12.0
